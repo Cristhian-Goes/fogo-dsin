@@ -20,10 +20,9 @@ def arrivals_per_hour(data: dict, moment: datetime) -> float:
                 count += 1
         except (TypeError, ValueError):
             continue
-    hours = 90 * 10
-    if count < 8:
-        return 1.2
-    return round(count / hours, 3)
+    if count < 40:
+        return 3.0
+    return round(min(6.0, count / (90 * 8)), 3)
 
 
 def mean_service_min(data: dict) -> float:
@@ -31,6 +30,11 @@ def mean_service_min(data: dict) -> float:
 
     samples = []
     for order in data.get("orders") or []:
+        if order.get("minutos_no_local"):
+            minutes = float(order["minutos_no_local"])
+            if 5 <= minutes <= 240:
+                samples.append(minutes)
+            continue
         if not order.get("started_at") or not order.get("closed_at"):
             continue
         try:
@@ -55,6 +59,8 @@ def simulate_day(rate_per_hour: float, service_min: float, teams: int, hours: in
         clock += rng.expovariate(rate_per_min)
         if clock < horizon:
             arrivals.append(clock)
+    if not arrivals:
+        return {"teams": teams, "arrivals": 0, "sla_pct": 100.0, "wait_min": 0.0, "utilization_pct": 0.0}
     free_at = [0.0] * teams
     waits = []
     within = 0
@@ -90,7 +96,9 @@ def curve(data: dict, moment: datetime, wait_limit: float = 60) -> dict:
         "rows": rows,
         "recommendation": target,
         "sentence": (
-            f"O mínimo para atingir 95% é {target} equipes."
+            "O mínimo para atingir 95% é 1 equipe."
+            if target == 1
+            else f"O mínimo para atingir 95% é {target} equipes."
             if target
             else "Nenhuma quantidade até 15 equipes atinge 95% com estas premissas."
         ),

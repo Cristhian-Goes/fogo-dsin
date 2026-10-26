@@ -96,6 +96,13 @@ def ensure(data: dict, moment: datetime) -> bool:
             order["custo_pecas"] = 40 if index % 2 else 220
             order["custo_deslocamento"] = 45
             changed = True
+        if order.get("status") == "concluida" and order.get("closed_at") and not order.get("minutos_no_local"):
+            import model
+            closed = model.parse_iso(order["closed_at"])
+            minutes = 8 if index % 5 == 0 else 40
+            order["started_at"] = model.iso(closed - timedelta(minutes=minutes))
+            order["minutos_no_local"] = minutes
+            changed = True
         if order.get("status") == "concluida" and "conclusao" not in order:
             order["started_at"] = order.get("started_at") or order.get("opened_at")
             order["checkin"] = {"lat": order.get("lat"), "lng": order.get("lng"), "at": order.get("closed_at"), "metros": 12}
@@ -187,6 +194,64 @@ def valor(data: dict, moment: datetime, finance: dict | None = None, compliance:
         "premises": "Valores estimados. A hora de rota evitada vale R$ 1,80 nesta premissa. A multa usa o valor do primeiro contrato. A autuação é simulada.",
         "method": "Soma premissas parametrizáveis sobre a rota do dia, os contratos e a aferição. Não é um laudo.",
     }
+
+
+def emit(data: dict, event: str, payload: dict) -> None:
+    import hashlib
+    import hmac
+    import json
+    import urllib.request
+
+    body = json.dumps({"event": event, "payload": payload}, ensure_ascii=False).encode("utf-8")
+    for hook in data.get("webhooks") or []:
+        if event not in (hook.get("events") or []):
+            continue
+        secret = str(hook.get("secret") or "").encode("utf-8")
+        signature = hmac.new(secret, body, hashlib.sha256).hexdigest()
+        request = urllib.request.Request(
+            hook.get("url") or "",
+            data=body,
+            headers={"Content-Type": "application/json", "X-FOGO-Signature": signature, "User-Agent": "FOGO-CCO/1.0"},
+        )
+        try:
+            urllib.request.urlopen(request, timeout=2)
+        except Exception:
+            continue
+
+
+def openapi() -> dict:
+    paths = {
+        "/api/health": {"get": {"summary": "Saúde do processo"}},
+        "/api/session": {"post": {"summary": "Entrar com usuário e senha"}},
+        "/api/bootstrap": {"get": {"summary": "Estado da central"}},
+        "/api/orders": {"get": {"summary": "Listar OS"}, "post": {"summary": "Abrir OS"}},
+        "/api/gestao": {"get": {"summary": "Painéis de custo, conformidade, equipe e valor"}},
+        "/api/integridade": {"get": {"summary": "Verificar a cadeia de hash"}},
+        "/api/webhooks": {"post": {"summary": "Cadastrar webhook com segredo HMAC"}},
+        "/api/chat": {"post": {"summary": "Pergunta operacional ou relatório por palavra-chave"}},
+    }
+    return {
+        "openapi": "3.0.3",
+        "info": {"title": "F.O.G.O.", "version": "1", "description": "API local da central. Sessão no cabeçalho X-Session."},
+        "paths": paths,
+        "webhooks": {
+            "os.criada": {"description": "OS aberta. Corpo assinado com HMAC-SHA256 em X-FOGO-Signature."},
+            "alerta.critico": {"description": "Alerta crítico publicado na fita."},
+        },
+    }
+
+
+def docs_html() -> str:
+    spec = openapi()
+    rows = "".join(f"<li><code>{method.upper()} {path}</code> — {item['summary']}</li>" for path, methods in spec["paths"].items() for method, item in methods.items())
+    return f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>F.O.G.O. · API</title>
+<style>body{{font:16px/1.45 Segoe UI,sans-serif;margin:32px;color:#1c2430;max-width:760px}} code{{background:#f4f6f8;padding:2px 6px}}</style></head>
+<body><h1>API da central</h1>
+<p>O contrato em JSON está em <a href="/openapi.json">/openapi.json</a>. As rotas de escrita pedem o cabeçalho <code>X-Session</code>.</p>
+<p>Webhooks cadastrados em <code>POST /api/webhooks</code> recebem <code>os.criada</code> e <code>alerta.critico</code>. A assinatura é HMAC-SHA256 do corpo, no cabeçalho <code>X-FOGO-Signature</code>.</p>
+<ul>{rows}</ul>
+<p>No chat, sem chave de IA, as frases "relatório de fornecedor", "custo do período" e "sla de equipes" devolvem o recorte já calculado.</p>
+</body></html>"""
 
 
 def report_text(data: dict, moment: datetime, kind: str) -> str:

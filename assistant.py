@@ -57,6 +57,12 @@ def briefing(data: dict, moment: datetime) -> dict[str, Any]:
 
 def _local(data: dict, text: str, moment: datetime, confirm: bool) -> dict[str, Any]:
     folded = text.lower()
+    if "fornecedor" in folded and "relat" in folded:
+        return {"reply": __import__("ops_gestao").report_text(data, moment, "fornecedor"), "targets": []}
+    if "custo" in folded and any(word in folded for word in ("periodo", "período", "mes", "mês", "relat")):
+        return {"reply": __import__("ops_gestao").report_text(data, moment, "custo"), "targets": []}
+    if "sla" in folded and "equipe" in folded:
+        return {"reply": __import__("ops_gestao").report_text(data, moment, "sla"), "targets": []}
     if any(word in folded for word in ("resumo", "briefing", "turno")):
         pack = briefing(data, moment)
         return {"reply": pack["text"], "targets": []}
@@ -98,7 +104,7 @@ def _local(data: dict, text: str, moment: datetime, confirm: bool) -> dict[str, 
         }
     kpis = model.kpis(data)
     return {
-        "reply": f"Posso resumir o turno, listar o que está crítico, abrir uma OS ou olhar a previsão. Agora: {kpis['operational']} equipamentos operacionais e {kpis['agents_active']} agentes em atividade.",
+        "reply": f"Posso resumir o turno, listar o que está crítico, abrir uma OS, olhar a previsão ou montar o relatório de custo, de fornecedor e de SLA de equipes. Agora: {kpis['operational']} equipamentos operacionais e {kpis['agents_active']} agentes em atividade.",
         "targets": [],
     }
 

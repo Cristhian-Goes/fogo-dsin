@@ -72,6 +72,7 @@ def panel(data: dict, moment: datetime) -> dict:
     equipment = {item["id"]: item for item in data.get("equipment") or []}
     month_key = moment.strftime("%Y-%m")
     month_total = 0.0
+    month_count = 0
     counted = 0
     by_supplier: dict[str, float] = {}
     by_equipment: dict[str, float] = {}
@@ -88,6 +89,7 @@ def panel(data: dict, moment: datetime) -> dict:
         closed = str(order.get("closed_at") or "")
         if closed.startswith(month_key):
             month_total = round(month_total + cost, 2)
+            month_count += 1
     downtime = []
     loss_total = 0.0
     for eq in data.get("equipment") or []:
@@ -117,7 +119,7 @@ def panel(data: dict, moment: datetime) -> dict:
     return {
         "month": month_key,
         "month_total": round(month_total, 2),
-        "average_order": round(month_total / counted, 2) if counted and month_total else (round(sum(by_equipment.values()) / counted, 2) if counted else 0),
+        "average_order": round(month_total / month_count, 2) if month_count else 0,
         "orders_with_cost": counted,
         "downtime_loss": loss_total,
         "downtime": downtime[:8],

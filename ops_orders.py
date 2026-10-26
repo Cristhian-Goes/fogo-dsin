@@ -7,26 +7,29 @@ from typing import Any
 
 import model
 
-KINDS = ("corretiva", "preventiva", "instalacao", "recolhimento")
+KINDS = ("corretiva", "preventiva", "instalacao", "recolhimento", "afericao")
 STATUSES = ("aberta", "atribuida", "em_execucao", "concluida", "cancelada")
 PRIORITIES = ("critica", "alta", "media", "baixa")
 SLA_HOURS = {"critica": 4, "alta": 24, "media": 72, "baixa": 24 * 7}
 OPEN = {"aberta", "atribuida", "em_execucao"}
 
 
-def present(order: dict, moment: datetime) -> dict[str, Any]:
+def present(order: dict, moment: datetime, data: dict | None = None) -> dict[str, Any]:
     out = dict(order)
     due = model.parse_iso(order["due_at"])
     left = int((due - moment).total_seconds())
     out["seconds_left"] = left
     out["overdue"] = left < 0 and order["status"] in OPEN
     out["events"] = list(order.get("events") or [])[:12]
+    if data is not None and order.get("status") in OPEN:
+        import ops_memory
+        out["dicas"] = ops_memory.search(data, order.get("description") or "", "", 3)
     return out
 
 
 def present_all(data: dict, moment: datetime | None = None) -> list[dict]:
     moment = moment or model.now_local()
-    return [present(item, moment) for item in data.get("orders") or []]
+    return [present(item, moment, data) for item in data.get("orders") or []]
 
 
 def reconcile(data: dict, moment: datetime) -> None:
@@ -54,7 +57,14 @@ def create(data: dict, payload: dict, moment: datetime, actor: str) -> dict[str,
     priority = model._choice(payload.get("priority") or "alta", "a prioridade", list(PRIORITIES))
     description = model._clean_text(payload.get("description"), "a descrição", 400)
     order = _open(data, eq, kind, priority, description, moment, actor)
-    return {"item": present(order, moment), "message": f"{order['number']} aberta para {eq['serial']}.", "focus": {"kind": "order", "id": order["id"]}}
+    if kind == "preventiva":
+        import ops_windows
+        order["janela"] = ops_windows.suggest(data, eq, moment)
+    import ops_ledger
+    import ops_memory
+    ops_ledger.append(data, moment, actor, "abriu OS", order["id"], {"kind": kind, "serial": eq.get("serial")})
+    tips = ops_memory.search(data, description, eq.get("type") or "", 3)
+    return {"item": present(order, moment), "message": f"{order['number']} aberta para {eq['serial']}.", "focus": {"kind": "order", "id": order["id"]}, "tips": tips, "janela": order.get("janela")}
 
 
 def assign(data: dict, order_id: str, agent_id: str | None, moment: datetime, actor: str) -> dict[str, Any]:
@@ -69,27 +79,44 @@ def assign(data: dict, order_id: str, agent_id: str | None, moment: datetime, ac
     order["status"] = "atribuida"
     order["updated_at"] = model.iso(moment)
     _event(order, moment, f"{actor} atribuiu a OS a {agent['name']}.")
+    import ops_ledger
+    ops_ledger.append(data, moment, actor, "atribuiu OS", order["id"], {"agent": agent["name"]})
     return {"item": present(order, moment), "message": f"{order['number']} atribuída a {agent['name']}.", "focus": {"kind": "order", "id": order["id"]}}
 
 
-def advance(data: dict, order_id: str, status: str, note: str, moment: datetime, actor: str) -> dict[str, Any]:
+def advance(data: dict, order_id: str, status: str, note: str, moment: datetime, actor: str, proof: dict | None = None) -> dict[str, Any]:
     order = model._must(data.setdefault("orders", []), order_id, "Ordem de serviço")
     status = model._choice(status, "o status", list(STATUSES))
     if order["status"] in ("concluida", "cancelada"):
         raise model.Invalid("Esta OS já foi encerrada.")
     if status == "em_execucao" and not order.get("agent_id"):
         raise model.Invalid("Atribua um responsável antes de iniciar.")
+    if status == "em_execucao" and not order.get("started_at"):
+        order["started_at"] = model.iso(moment)
     order["status"] = status
     order["updated_at"] = model.iso(moment)
     if note:
         order["notes"] = model._clean_text(note, "a observação", 400, required=False)
     if status == "concluida":
+        import ops_gestao
+        import ops_presence
+        reviewed = ops_presence.review(order, next((item for item in data.get("equipment") or [] if item["id"] == order.get("equipment_id")), None), proof or {}, ops_gestao.settings_of(data), moment)
+        order.update(reviewed["fields"])
+        order["conclusao"] = reviewed["conclusao"]
+        order["motivos"] = reviewed["motivos"]
         order["closed_at"] = model.iso(moment)
         _restore(data, order, moment)
+        if reviewed["conclusao"] == "suspeita":
+            model.push_feed(data, "atencao", f"{order['number']} concluída com ressalva: {'; '.join(reviewed['motivos'])}.", order.get("region") or "", moment)
     if status == "cancelada":
         order["closed_at"] = model.iso(moment)
     _event(order, moment, f"{actor} mudou a OS para {status}." + (f" {order.get('notes')}" if note else ""))
-    return {"item": present(order, moment), "message": f"{order['number']} está {status.replace('_', ' ')}.", "focus": {"kind": "order", "id": order["id"]}}
+    import ops_ledger
+    ops_ledger.append(data, moment, actor, "atualizou OS", order["id"], {"status": status, "conclusao": order.get("conclusao") or ""})
+    message = f"{order['number']} está {status.replace('_', ' ')}."
+    if order.get("conclusao") == "suspeita":
+        message += " Conclusão suspeita: " + "; ".join(order.get("motivos") or []) + "."
+    return {"item": present(order, moment), "message": message, "focus": {"kind": "order", "id": order["id"]}}
 
 
 def pdf(data: dict, order_id: str, moment: datetime) -> bytes:

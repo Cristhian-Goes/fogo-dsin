@@ -59,14 +59,20 @@ SCREENS = [
     ("historico", "Histórico"),
     ("campo", "Modo campo"),
     ("acessos", "Configurações"),
+    ("financeiro", "Financeiro"),
+    ("conformidade", "Conformidade"),
+    ("dimensionamento", "Equipes"),
+    ("conhecimento", "Conhecimento"),
+    ("integridade", "Integridade"),
+    ("valor", "Valor entregue"),
 ]
 SCREEN_LABEL = dict(SCREENS)
 _ALL = [item[0] for item in SCREENS]
 _DESK = ["cco", "inteligencia", "ordens", "rotas", "ocorrencias", "alertas", "agentes", "frota"]
-_SHIFT = _DESK + ["inventario", "previsao", "linha"]
+_SHIFT = _DESK + ["inventario", "previsao", "linha", "financeiro", "conformidade", "dimensionamento", "conhecimento", "valor"]
 _CITY = _SHIFT + ["regioes"]
 _STATE = [item for item in _ALL if item not in ("acessos", "campo")]
-_AUDIT = ["cco", "ordens", "inventario", "previsao", "impacto", "regioes", "alertas", "linha", "historico"]
+_AUDIT = ["cco", "ordens", "inventario", "previsao", "impacto", "regioes", "alertas", "linha", "historico", "financeiro", "conformidade", "dimensionamento", "conhecimento", "valor", "integridade"]
 
 ROLES = {
     "administrador": {"label": "Administrador", "write": True, "dispatch": True, "admin": True, "scope": "brasil", "views": _ALL},

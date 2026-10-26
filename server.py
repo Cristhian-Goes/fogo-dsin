@@ -109,6 +109,7 @@ def load_store() -> None:
                 grew = model.ensure_inventory_size(STORE, now)
                 grew = ops_intel.ensure(STORE, now) or grew
                 grew = ops_dayroutes.ensure_scenario(STORE, now) or grew
+                grew = __import__("ops_gestao").ensure(STORE, now) or grew
                 before = len(STORE.get("orders") or [])
                 ops_orders.reconcile(STORE, now)
                 ops_vehicles.ensure(STORE, now)
@@ -128,6 +129,7 @@ def load_store() -> None:
     ops_intel.ensure(STORE, model.now_local())
     ops_dayroutes.ensure_scenario(STORE, model.now_local())
     ops_orders.reconcile(STORE, model.now_local())
+    __import__("ops_gestao").ensure(STORE, model.now_local())
     save_store()
 
 
@@ -192,6 +194,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if method != "GET":
                 self.send_json({"error": "Método não aceito."}, 405)
+                return
+            if parsed.path.rstrip("/") == "/docs":
+                page = __import__("ops_gestao").docs_html().encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(page)))
+                self.end_headers()
+                self.wfile.write(page)
+                return
+            if parsed.path.rstrip("/") == "/openapi.json":
+                self.send_json(__import__("ops_gestao").openapi())
                 return
             self._static(parsed.path)
         except access.Denied as exc:
@@ -582,6 +595,7 @@ class Handler(BaseHTTPRequestHandler):
             access.ensure_scope(actor, eq.get("region") if eq else None)
             created = mutate(lambda data, now: ops_orders.create(data, body, now, actor.get("name") or "Operador"))
             access.audit(actor, "abriu OS", created["item"]["id"])
+            __import__("ops_gestao").emit(STORE, "os.criada", {"id": created["item"]["id"], "number": created["item"].get("number")})
             self.send_json({"ok": True, **created})
             return
         if len(parts) == 3 and parts[0] == "orders" and parts[2] == "pdf" and method == "GET":
@@ -600,7 +614,7 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "orders" and parts[2] == "status" and method == "POST":
             body = self.read_json()
             actor = self._screen("ordens", "write")
-            result = mutate(lambda data, now: ops_orders.advance(data, parts[1], str(body.get("status") or ""), str(body.get("note") or ""), now, actor.get("name") or "Operador"))
+            result = mutate(lambda data, now: ops_orders.advance(data, parts[1], str(body.get("status") or ""), str(body.get("note") or ""), now, actor.get("name") or "Operador", body))
             access.audit(actor, "atualizou OS", parts[1])
             self.send_json({"ok": True, **result})
             return
@@ -646,6 +660,49 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.read_json()
             self.send_json({"ok": True, "received": True})
+            return
+        if parts == ["gestao"] and method == "GET":
+            actor = access.require(self.headers.get("X-Session"))
+            access.require_view(actor, "financeiro")
+            with LOCK:
+                pack = __import__("ops_gestao").snapshot(STORE, model.now_local())
+            self.send_json(pack)
+            return
+        if parts == ["integridade"] and method == "GET":
+            actor = access.require(self.headers.get("X-Session"))
+            access.require_view(actor, "integridade")
+            with LOCK:
+                chain = list(STORE.get("ledger") or [])
+                verdict = __import__("ops_ledger").verify(chain)
+            self.send_json({"verdict": verdict, "tail": chain[-12:]})
+            return
+        if parts == ["integridade", "pdf"] and method == "GET":
+            actor = access.require(self.headers.get("X-Session"))
+            access.require_view(actor, "integridade")
+            with LOCK:
+                chain = list(STORE.get("ledger") or [])
+                blob = __import__("ops_ledger").pdf(chain, __import__("ops_ledger").verify(chain))
+            self.send_bytes(blob, "application/pdf", "integridade.pdf")
+            return
+        if parts == ["webhooks"] and method == "POST":
+            actor = self._actor("admin")
+            body = self.read_json()
+            url = str(body.get("url") or "").strip()
+            if not (url.startswith("https://") or url.startswith("http://127.0.0.1") or url.startswith("http://localhost")):
+                raise model.Invalid("O webhook precisa de https ou de um endereço deste computador.")
+            events = [str(item) for item in (body.get("events") or ["os.criada", "alerta.critico"])]
+            secret = str(body.get("secret") or "")
+
+            def _add(data, now):
+                data.setdefault("webhooks", [])
+                item = {"id": f"WH-{len(data['webhooks']) + 1}", "url": url, "events": events, "secret": secret}
+                data["webhooks"].append(item)
+                data["webhooks"] = data["webhooks"][-20:]
+                return {"id": item["id"], "url": url, "events": events}
+
+            created = mutate(_add)
+            access.audit(actor, "cadastrou webhook", created["id"])
+            self.send_json({"ok": True, **created})
             return
         if parts == ["config"] and method == "GET":
             self.send_json({

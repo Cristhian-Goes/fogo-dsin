@@ -1921,6 +1921,11 @@ def predictions(data: dict, moment: datetime | None = None, focus: date | None =
 def present_equipment(eq: dict, today: date) -> dict[str, Any]:
     out = dict(eq)
     out["maintenance_flag"] = maintenance_flag(eq, today)
+    raw = str(eq.get("validade_afericao") or "")[:10]
+    try:
+        out["fora_de_conformidade"] = bool(raw) and date.fromisoformat(raw) < today
+    except ValueError:
+        out["fora_de_conformidade"] = False
     out["type_label"] = TYPES[eq["type"]]["label"]
     out["history"] = list(eq.get("history") or [])[:8]
     return out
