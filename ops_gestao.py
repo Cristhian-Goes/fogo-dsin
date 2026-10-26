@@ -127,6 +127,19 @@ def ensure(data: dict, moment: datetime) -> bool:
     if not data.get("ledger"):
         ops_ledger.append(data, moment, "sistema", "carga da demonstração", "store", {"origem": "seed"})
         changed = True
+    known = {item.get("entity") for item in data.get("ledger") or []}
+    pending = [order for order in data.get("orders") or [] if order.get("id") and order.get("id") not in known]
+    for order in pending[-80:]:
+        number = order.get("number") or order.get("id")
+        ops_ledger.append(
+            data,
+            moment,
+            "sistema",
+            f"OS {number} · {order.get('status') or 'registrada'}",
+            order.get("id"),
+            {"number": number, "status": order.get("status"), "kind": order.get("kind")},
+        )
+        changed = True
     return changed
 
 
@@ -141,6 +154,7 @@ def snapshot(data: dict, moment: datetime) -> dict:
         "presence": presence,
         "staffing": staff,
         "knowledge": ops_memory.catalog(data),
+        "knowledge_open": ops_memory.for_open(data),
         "suspects": [
             {
                 "id": item.get("id"),

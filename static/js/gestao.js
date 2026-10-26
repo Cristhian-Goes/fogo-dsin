@@ -1,9 +1,12 @@
 import { api } from "./api.js";
-import { esc } from "./format.js";
+import { esc, toast } from "./format.js";
 
 async function downloadIntegrity() {
   const response = await fetch("/api/integridade/pdf", { headers: { "X-Session": sessionStorage.getItem("fogo-session") || "" } });
-  if (!response.ok) return;
+  if (!response.ok) {
+    toast("Não foi possível gerar o PDF da integridade.", "bad");
+    return;
+  }
   const blob = await response.blob();
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
@@ -12,6 +15,7 @@ async function downloadIntegrity() {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 1500);
+  toast("PDF da integridade baixado.");
 }
 
 function money(value) {
@@ -40,6 +44,7 @@ export async function mount(main, view) {
       const pack = await api.integrity();
       main.innerHTML = integrity(pack);
       document.getElementById("integrity-pdf")?.addEventListener("click", downloadIntegrity);
+      document.getElementById("integrity-refresh")?.addEventListener("click", () => mount(main, view));
       return;
     }
     const pack = await api.gestao();
@@ -109,36 +114,85 @@ function staffing(pack) {
 
 function knowledge(pack) {
   const rows = pack.knowledge || [];
+  const tips = rows.reduce((sum, row) => sum + (row.count || row.entries?.length || 0), 0);
+  const body = rows.map((row) => {
+    const entries = row.entries || (row.tips || []).map((tip) => ({ tip }));
+    return `<section class="knowledge-group" data-model="${esc(row.model)}">
+      <h2>${esc(row.model)} <span>${esc(row.type || "modelo")} · ${row.count || entries.length} dicas</span></h2>
+      <div class="table-wrap"><table class="sheet">
+        <thead><tr><th>OS</th><th>Equipamento</th><th>Região</th><th>Dica do técnico</th></tr></thead>
+        <tbody>${entries.map((entry) => `<tr>
+          <td>${esc(entry.order || "")}</td>
+          <td>${esc(entry.serial || "")}</td>
+          <td>${esc(entry.region || "")}</td>
+          <td>${esc(entry.tip || "")}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </section>`;
+  }).join("");
   return `<section class="page">
-    <h1>Base de conhecimento</h1>
-    <p class="hint">A busca compara o modelo e as palavras da dica. Não é um modelo treinado.</p>
-    <label class="field">Buscar modelo ou dica<input id="knowledge-q" type="search" placeholder="radar, fonte, lente" /></label>
-    ${rows.map((row) => `<article data-model="${esc(row.model)}"><h2>${esc(row.model)}</h2><ul>${row.tips.map((tip) => `<li>${esc(tip)}</li>`).join("")}</ul></article>`).join("") || "<p>Nenhuma dica registrada no fechamento das OS.</p>"}
+    <div class="knowledge-head">
+      <h1>Conhecimento de campo</h1>
+      <p class="hint">${rows.length} modelos · ${tips} dicas</p>
+    </div>
+    <p class="hint">Cada linha é a dica escrita no fechamento da OS. A busca olha modelo, equipamento, região e o texto.</p>
+    <label class="field">Buscar<input id="knowledge-q" type="search" placeholder="modelo, região ou dica" /></label>
+    <h2>Registrado no fechamento</h2>
+    ${body || "<p>Nenhuma dica registrada no fechamento das OS.</p>"}
+    <h2>Útil para as OS abertas</h2>
+    ${(pack.knowledge_open || []).map((row) => `<article class="knowledge-group" data-model="${esc(row.model)} ${esc(row.order)}">
+      <h2>${esc(row.order)} <span>${esc(row.model)} · ${esc(row.region)} · ${esc(row.status)}</span></h2>
+      <ul class="rows">${(row.tips || []).map((tip) => `<li>${esc(tip)}</li>`).join("")}</ul>
+    </article>`).join("") || "<p class='hint'>Nenhuma OS aberta aproveita uma dica já registrada.</p>"}
   </section>`;
 }
 
 function value(pack) {
-  const item = pack.value;
+  const item = pack.value || {};
   return `<section class="page">
     <h1>Valor entregue</h1>
-    <p class="hint">${esc(item.premises)}</p>
+    <p><b>${esc(item.staff_recommendation || "Sem recomendação de equipe neste momento.")}</b></p>
     ${cards([
-      ["Rotas evitadas", money(item.trip_savings), item.method],
-      ["Multas contratuais identificadas", money(item.fines_identified), "Violações de SLA vezes a multa do contrato."],
-      ["Equipamentos fora de conformidade", item.expired_equipment, "Cadastro de validade de aferição."],
-      ["Prova de presença válida", `${item.presence_pct}%`, pack.presence?.method || ""],
+      ["Rotas evitadas", money(item.trip_savings), "Minutos poupados na rota do dia vezes R$ 1,80."],
+      ["Multas identificadas", money(item.fines_identified), "Violações de SLA vezes a multa do primeiro contrato."],
+      ["Fora de conformidade", item.expired_equipment ?? 0, "Equipamentos com validade de aferição vencida."],
+      ["Presença válida", `${item.presence_pct ?? 0}%`, pack.presence?.method || "OS encerradas com conclusão válida."],
     ])}
-    <p>${esc(item.staff_recommendation || "")}</p>
-    <p class="hint">Minutos poupados na rota do dia: ${esc(String(item.saved_min || 0))}. Diferença da projeção para o orçamento: ${money(item.budget_gap)}.</p>
+    <h2>Como a conta foi feita</h2>
+    <ul class="rows">
+      <li><b>Rotas</b> ${esc(String(item.saved_min || 0))} min poupados na rota do dia.</li>
+      <li><b>Contratos</b> ${esc(String(item.violations || 0))} ${Number(item.violations) === 1 ? "violação" : "violações"} de SLA.</li>
+      <li><b>Aferição</b> autuações simuladas: ${esc(String(item.citations_simulated || 0))}.</li>
+      <li><b>Orçamento</b> diferença da projeção para o ano: ${money(item.budget_gap)}.</li>
+    </ul>
+    <p class="hint">${esc(item.premises || "")} ${esc(item.method || "")}</p>
   </section>`;
 }
 
 function integrity(pack) {
   const verdict = pack.verdict || {};
+  const rows = pack.tail || [];
+  const last = rows[rows.length - 1] || {};
   return `<section class="page">
     <h1>Integridade</h1>
-    <p>${verdict.ok ? "A cadeia confere." : esc(verdict.reason || "A cadeia falhou.")}</p>
-    <p><button type="button" class="primary" id="integrity-pdf">Baixar PDF</button></p>
-    <ul class="rows">${(pack.tail || []).map((row) => `<li><b>${esc(row.id)}</b> ${esc(row.action)} · ${esc(row.entity)}<br><small>${esc(row.hash_atual || "")}</small></li>`).join("") || "<li>Nenhum registro.</li>"}</ul>
+    <p><b>${verdict.ok ? "A cadeia confere." : esc(verdict.reason || "A cadeia falhou.")}</b> ${verdict.ok ? `${verdict.count || rows.length} registros encadeados.` : ""}</p>
+    ${cards([
+      ["Registros na cadeia", verdict.count ?? rows.length, "Cada registro guarda o hash do anterior."],
+      ["Último registro", last.id || "nenhum", last.action || ""],
+    ])}
+    <p class="form-actions">
+      <button type="button" class="primary" id="integrity-pdf">Baixar PDF</button>
+      <button type="button" class="ghost" id="integrity-refresh">Verificar de novo</button>
+    </p>
+    <div class="table-wrap"><table class="sheet">
+      <thead><tr><th>Registro</th><th>Quando</th><th>Quem</th><th>Ação</th><th>Hash</th></tr></thead>
+      <tbody>${rows.map((row) => `<tr>
+        <td>${esc(row.id || "")}</td>
+        <td>${esc(String(row.at || "").slice(0, 16).replace("T", " "))}</td>
+        <td>${esc(row.actor || "")}</td>
+        <td>${esc(row.action || "")}</td>
+        <td>${esc(String(row.hash_atual || "").slice(0, 12))}</td>
+      </tr>`).join("") || "<tr><td colspan=\"5\">Nenhum registro na cadeia.</td></tr>"}</tbody>
+    </table></div>
   </section>`;
 }

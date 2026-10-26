@@ -221,6 +221,13 @@ function renderShell() {
     event.preventDefault();
     document.querySelector("#find-list button")?.click();
   });
+  if (window.innerWidth <= 1100) {
+    const more = document.getElementById("nav-more");
+    if (more) {
+      more.hidden = true;
+      document.querySelector("[data-action='toggle-more']")?.setAttribute("aria-expanded", "false");
+    }
+  }
 }
 
 function show(view) {
@@ -881,35 +888,42 @@ async function ensureSession() {
 }
 
 function paintLogin(config, resolve) {
-  const local = location.hostname === "127.0.0.1" || location.hostname === "localhost";
-  const siteKey = local ? "" : (config.turnstileSiteKey || "");
+  const siteKey = config.turnstileSiteKey || "";
   const cloudflare = config.cloudflare?.enabled;
   document.getElementById("app").innerHTML = `
     <section class="gate">
       <form class="gate-card" id="login-form">
-        <h1>F.O.G.O.</h1>
-        <p class="hint">Entre com o usuário da central. O administrador cria as outras contas em Acessos, com perfil e grupo.</p>
-        <label class="field">Usuário<input name="email" autocomplete="username" required /></label>
+        <div class="gate-brand">
+          <span class="gate-mark" aria-hidden="true"></span>
+          <div>
+            <h1>F.O.G.O.</h1>
+            <p>Central de Controle Operacional</p>
+          </div>
+        </div>
+        <p class="lede">Entre com o usuário da central. O administrador cria as outras contas em Acessos.</p>
+        <label class="field">Usuário<input name="email" autocomplete="username" required placeholder="nome@orgao" /></label>
         <label class="field">Senha<input name="password" type="password" autocomplete="current-password" required /></label>
-        ${siteKey ? `<div id="turnstile-box"></div>` : ""}
+        ${siteKey ? `<div id="turnstile-box"></div><p class="hint" id="turnstile-note" hidden>A Cloudflare não alcançou este endereço. Neste computador a entrada segue com usuário e senha.</p>` : ""}
         <button type="submit" class="primary">Entrar</button>
         ${cloudflare ? `<button type="button" class="ghost" id="login-cloudflare">Entrar com a Cloudflare Access</button>` : ""}
-        <h2>Contas de demonstração</h2>
-        <div class="filters">
-          ${[
-            ["operador@fogo.local", "Operador da CCO"],
-            ["admin@fogo.local", "Administrador de demonstração"],
-            ["agente@fogo.local", "Agente de campo"],
-          ].map(([email, label]) => `<button type="button" class="ghost" data-demo="${esc(email)}">${esc(label)}</button>`).join("")}
+        <div class="gate-demo">
+          <h2>Contas de demonstração</h2>
+          <div class="filters">
+            ${[
+              ["operador@fogo.local", "Operador da CCO"],
+              ["admin@fogo.local", "Administrador"],
+              ["agente@fogo.local", "Agente de campo"],
+            ].map(([email, label]) => `<button type="button" class="ghost" data-demo="${esc(email)}">${esc(label)}</button>`).join("")}
+          </div>
         </div>
-        <p class="hint">A senha dessas três contas é demonstracao.</p>
       </form>
     </section>`;
   if (siteKey) mountTurnstile(siteKey);
   const form = document.getElementById("login-form");
   const enter = (email, password) => {
-    const token = siteKey ? (window.turnstile?.getResponse() || "") : "";
-    if (siteKey && !token && !local) {
+    const ready = siteKey && !window.__turnstileDown;
+    const token = ready ? (window.turnstile?.getResponse() || "") : "";
+    if (ready && !token) {
       toast("Confirme a verificação da Cloudflare antes de entrar.", "bad");
       return;
     }
@@ -933,8 +947,12 @@ function mountTurnstile(siteKey) {
   if (!node) return;
   const render = () => window.turnstile.render(node, {
     sitekey: siteKey,
+    theme: document.documentElement.dataset.theme === "dark" ? "dark" : "light",
     "error-callback": () => {
+      window.__turnstileDown = true;
       node.replaceChildren();
+      const note = document.getElementById("turnstile-note");
+      if (note) note.hidden = false;
     },
   });
   if (window.turnstile) {
@@ -955,6 +973,7 @@ async function acceptLogin(run, resolve) {
     state.user = session.user;
     resolve();
   } catch (error) {
+    window.turnstile?.reset();
     toast(error.message, "bad");
   }
 }

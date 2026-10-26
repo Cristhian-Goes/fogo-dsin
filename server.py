@@ -674,7 +674,7 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 chain = list(STORE.get("ledger") or [])
                 verdict = __import__("ops_ledger").verify(chain)
-            self.send_json({"verdict": verdict, "tail": chain[-12:]})
+            self.send_json({"verdict": verdict, "tail": chain[-24:]})
             return
         if parts == ["integridade", "pdf"] and method == "GET":
             actor = access.require(self.headers.get("X-Session"))
@@ -710,7 +710,7 @@ class Handler(BaseHTTPRequestHandler):
                 "supabaseAnonKey": os.environ.get("SUPABASE_ANON_KEY", ""),
                 "environment": os.environ.get("FOGO_ENV", "development"),
                 "cloudflare": cloudflare_access.public_status(),
-                "turnstileSiteKey": "" if self._local_host() else cloudflare_access.turnstile_sitekey(),
+                "turnstileSiteKey": cloudflare_access.turnstile_sitekey(),
             })
             return
         self.send_json({"error": "Caminho não encontrado."}, 404)

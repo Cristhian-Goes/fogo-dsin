@@ -9,7 +9,12 @@ async function request(url, options = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error || "Não foi possível concluir a operação.");
+    const message = data.error || "Não foi possível concluir a operação.";
+    if (response.status === 403 && message.startsWith("Entre com um perfil")) {
+      sessionStorage.removeItem("fogo-session");
+      location.reload();
+    }
+    throw new Error(message);
   }
   return data;
 }

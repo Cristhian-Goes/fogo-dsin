@@ -40,11 +40,49 @@ def search(data: dict, query: str = "", type_name: str = "", limit: int = 3) -> 
     return [item for _score, item in scored[:limit]]
 
 
+def for_open(data: dict, limit: int = 8) -> list[dict]:
+    equipment = {item["id"]: item for item in data.get("equipment") or []}
+    rows = []
+    for order in data.get("orders") or []:
+        if order.get("status") not in {"aberta", "atribuida", "em_execucao"}:
+            continue
+        eq = equipment.get(order.get("equipment_id")) or {}
+        tips = search(data, str(order.get("description") or ""), eq.get("type") or "", 3)
+        if not tips:
+            continue
+        rows.append({
+            "order": order.get("number") or order.get("id") or "",
+            "status": order.get("status") or "",
+            "serial": eq.get("serial") or "",
+            "model": eq.get("model") or eq.get("type") or "",
+            "region": eq.get("region") or "",
+            "tips": [item["tip"] for item in tips],
+        })
+    return rows[:limit]
+
+
 def catalog(data: dict) -> list[dict]:
-    grouped: dict[str, list] = {}
-    for item in search(data, limit=200):
-        key = item["model"] or item["type"] or "Sem modelo"
-        grouped.setdefault(key, [])
-        if item["tip"] not in grouped[key]:
-            grouped[key].append(item["tip"])
-    return [{"model": key, "tips": values[:8]} for key, values in sorted(grouped.items())]
+    equipment = {item["id"]: item for item in data.get("equipment") or []}
+    grouped: dict[str, dict] = {}
+    for order in data.get("orders") or []:
+        tip = str(order.get("dica_do_tecnico") or "").strip()
+        if not tip:
+            continue
+        eq = equipment.get(order.get("equipment_id")) or {}
+        key = eq.get("model") or eq.get("type") or "Sem modelo"
+        bucket = grouped.setdefault(key, {"model": key, "type": eq.get("type") or "", "entries": []})
+        bucket["entries"].append({
+            "tip": tip,
+            "order": order.get("number") or order.get("id") or "",
+            "serial": eq.get("serial") or order.get("serial") or "",
+            "region": eq.get("region") or order.get("region") or "",
+            "kind": order.get("kind") or "",
+        })
+    rows = []
+    for key in sorted(grouped):
+        item = grouped[key]
+        total = len(item["entries"])
+        item["count"] = total
+        item["entries"] = item["entries"][:12]
+        rows.append(item)
+    return rows

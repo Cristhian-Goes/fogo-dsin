@@ -54,11 +54,9 @@ def verify_turnstile(token: str, remote_ip: str) -> None:
     secret = os.environ.get("CF_TURNSTILE_SECRET", "").strip()
     if not secret:
         return
-    # O widget deste site key recusa 127.0.0.1 (erro 110200) e trava a tela.
-    # Neste computador a senha entra direto, sem chamar a Cloudflare.
-    if remote_ip in {"127.0.0.1", "::1", "localhost"}:
-        return
     if not token:
+        if remote_ip in {"127.0.0.1", "::1", "localhost"}:
+            return
         raise access.Denied("Confirme a verificação da Cloudflare antes de entrar.")
     import urllib.parse
     body = urllib.parse.urlencode({
