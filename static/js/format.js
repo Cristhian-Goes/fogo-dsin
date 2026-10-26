@@ -42,10 +42,10 @@ export function ago(iso, nowIso) {
 const STATUS = {
   operacional: ["Operacional", "ok"],
   mau_funcionamento: ["Mau funcionamento", "bad"],
-  em_manutencao: ["Em manutenção", "warn"],
+  em_manutencao: ["Em manutenção", "info"],
   desativado: ["Desativado", "mute"],
   furtado: ["Furtado", "bad"],
-  ainda_nao_instalado: ["Ainda não instalado", "ghost"],
+  ainda_nao_instalado: ["Não instalado", "install"],
   em_atividade: ["Em atividade", "ok"],
   em_deslocamento: ["Em deslocamento", "info"],
   em_pausa: ["Em pausa", "warn"],

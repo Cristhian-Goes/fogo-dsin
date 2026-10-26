@@ -86,6 +86,16 @@ Complexidade prática O(n²) por equipe. Serve para dezenas de paradas, não par
 
 O cenário “Rodar cenário de demonstração”, na tela Inteligência, percorre esses passos em cerca de 3 minutos.
 
+## Decisões de UX
+
+A pessoa na central precisa ver, em poucos segundos, o que exige atenção. O menu principal tem nove destinos: Central, O que fazer agora, Ordens de serviço, Rotas, Equipamentos, Agentes, Previsões, Impacto e Configurações. O restante continua em Mais, para não esconder telas que já existiam.
+
+A barra superior concentra a saúde da cidade, a busca (também em Ctrl+K), o sino de alertas críticos, o modo crise, o tema e o usuário. A paleta de comandos acha equipamento, agente, OS, bairro e tela. A tecla ? lista os atalhos. O primeiro acesso mostra um tour de cinco passos, que pode ser pulado.
+
+As cores de situação são as mesmas em badge, mapa e tabela: verde operacional, amarelo atenção, laranja suspeito, vermelho crítico, azul em manutenção, roxo não instalado, cinza desativado. O texto acompanha a cor. A fonte é Segoe UI, no próprio sistema, para a central abrir sem baixar fonte da internet. O corpo tem 14 px e os botões, no mínimo 40 px.
+
+Na Central, cinco indicadores ficam no topo e o que fazer agora fica na coluna direita. O quadro de OS aceita arrastar o card de estágio. O formulário de equipamento está em Identificação, Situação e Localização.
+
 ## Uso de IA
 
 A interface e a lógica foram construídas com auxílio do Grok 4.7, no Cursor. O índice, o risco de equipamento, a ordem das rotas e a inteligência operacional são estatística e regras explicáveis. O chat usa Anthropic ou OpenAI somente se a chave existir; sem chave, roda local. Não há chave gravada no código.

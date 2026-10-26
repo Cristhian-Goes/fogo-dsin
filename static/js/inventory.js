@@ -127,7 +127,7 @@ function equipmentTable(query) {
   if (tablePage >= pages) tablePage = pages - 1;
   const slice = rows.slice(tablePage * PAGE, tablePage * PAGE + PAGE);
   return `
-    <p class="hint">${state.equipmentStatus === "indisponivel" ? "Filtro: equipamentos indisponíveis. " : ""}${rows.length ? `${rows.length} registro(s).` : "Nenhum registro encontrado."}</p>
+    <p class="hint">${state.equipmentStatus === "indisponivel" ? "Filtro: equipamentos indisponíveis. " : ""}${rows.length ? `${rows.length} registro(s).` : "Nenhum equipamento com esses filtros."} ${rows.length ? "" : `<button type="button" class="ghost" data-action="clear-eq-filter">Limpar filtros</button>`}</p>
     <table>
       <thead><tr><th>Situação</th><th>Tipo</th><th>Série</th><th>Local</th><th>Manutenção</th><th></th></tr></thead>
       <tbody>
@@ -193,17 +193,25 @@ function equipmentForm(editor) {
       <h2>${editor.mode === "new" ? "Novo equipamento" : "Editar " + esc(v.serial || "equipamento")}</h2>
       ${editor.prefilled ? "<p class='hint'>Equipamento, endereço e identificação vieram da ficha. A manutenção ainda não foi salva: revise e confirme.</p>" : ""}
       <p class="form-error" id="form-error" hidden></p>
-      <div class="fields">
-        ${selectField("type", "Tipo", schema.types, v.type)}
-        ${input("serial", "Número de série", v.serial)}
-        ${input("brand", "Marca", v.brand)}
-        ${input("model", "Modelo", v.model)}
-        ${selectField("agency", "Órgão responsável", schema.agencies.map((id) => ({ id, label: id })), v.agency)}
-        ${selectField("status", "Situação", schema.statuses, v.status)}
-        ${selectField("maintenance_need", "Necessidade de manutenção", schema.maintenance, v.maintenance_need)}
-        ${input("next_maintenance", "Próxima manutenção", v.next_maintenance, "date", false)}
-        ${input("installed_at", "Instalado em", v.installed_at, "date", false)}
-      </div>
+      <fieldset>
+        <legend>Identificação</legend>
+        <div class="fields">
+          ${selectField("type", "Tipo", schema.types, v.type)}
+          ${input("serial", "Número de série", v.serial)}
+          ${input("brand", "Marca", v.brand)}
+          ${input("model", "Modelo", v.model)}
+          ${selectField("agency", "Órgão responsável", schema.agencies.map((id) => ({ id, label: id })), v.agency)}
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Situação e manutenção</legend>
+        <div class="fields">
+          ${selectField("status", "Situação", schema.statuses, v.status)}
+          ${selectField("maintenance_need", "Necessidade de manutenção", schema.maintenance, v.maintenance_need)}
+          ${input("next_maintenance", "Próxima manutenção", v.next_maintenance, "date", false)}
+          ${input("installed_at", "Instalado em", v.installed_at, "date", false)}
+        </div>
+      </fieldset>
       <fieldset>
         <legend>Características deste tipo</legend>
         <div class="fields" id="attr-fields">${attrFields(v.type, v.attrs || {})}</div>

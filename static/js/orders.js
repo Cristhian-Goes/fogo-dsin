@@ -41,8 +41,8 @@ export function mount(main) {
       </form>
       <div class="kanban">
         ${COLUMNS.map(([id, label]) => `
-          <section>
-            <h2>${label}</h2>
+          <section data-column="${id}">
+            <h2>${label} <span class="hint">${orders.filter((item) => item.status === id).length}</span></h2>
             ${orders.filter((item) => item.status === id).map((item) => card(item)).join("") || "<p class='hint'>Nenhuma.</p>"}
           </section>`).join("")}
       </div>
@@ -59,15 +59,36 @@ export function mount(main) {
       toast(error.message, "bad");
     }
   });
+  main.querySelectorAll(".os-card").forEach((cardNode) => {
+    cardNode.addEventListener("dragstart", (event) => {
+      event.dataTransfer.setData("text/plain", cardNode.dataset.order);
+    });
+  });
+  main.querySelectorAll("[data-column]").forEach((column) => {
+    column.addEventListener("dragover", (event) => event.preventDefault());
+    column.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      const id = event.dataTransfer.getData("text/plain");
+      const status = column.dataset.column;
+      if (!id || status === "cancelada" && !window.confirm("Cancelar esta OS?")) return;
+      try {
+        if (status === "atribuida") await api.assignOrder(id);
+        else await api.orderStatus(id, status);
+      } catch (error) {
+        const { toast } = await import("./format.js");
+        toast(error.message, "bad");
+      }
+    });
+  });
 }
 
 function card(item) {
   const left = item.seconds_left;
   const clock = left >= 0 ? `faltam ${Math.floor(left / 3600)} h` : `vencida há ${Math.floor(-left / 3600)} h`;
   return `
-    <article class="os-card${item.overdue ? " is-late" : ""}">
+    <article class="os-card${item.overdue ? " is-late" : ""}" draggable="true" data-order="${esc(item.id)}" data-status="${esc(item.status)}">
       <b>${esc(item.number)}</b>
-      <p>${esc(item.serial || "")} · ${esc(item.priority)} · ${esc(item.kind)}</p>
+      <p>${esc(item.serial || "")} · <span class="pill tone-${item.priority === "critica" ? "bad" : item.priority === "alta" ? "warn" : "info"}"><i></i>${esc(item.priority)}</span> · ${esc(item.kind)}</p>
       <p>${esc(item.description || "")}</p>
       <p class="hint">${esc(item.agent_name || "Sem responsável")} · ${clock} · ${esc(clockLabel(item.due_at))}</p>
       <div class="actions">

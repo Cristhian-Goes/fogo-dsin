@@ -75,7 +75,7 @@ export function mount(main) {
       <ul class="rows">
         ${(intel.problems || []).map((item) => `<li><b>${esc(item.serial)} · ${esc(item.advice)}</b> <span>${esc(item.why)}</span></li>`).join("") || "<li>Nenhum equipamento passou do critério.</li>"}
       </ul>
-      <h2>Impacto operacional</h2>
+      <h2 id="impacto">Impacto operacional</h2>
       <table>
         <thead><tr><th>Indicador</th><th>Antes</th><th>Depois</th></tr></thead>
         <tbody>
@@ -91,7 +91,7 @@ export function mount(main) {
 }
 
 export function afterReload() {
-  if (state.view === "inteligencia" && !running) mount(document.getElementById("main"));
+  if ((state.view === "inteligencia" || state.view === "impacto") && !running) mount(document.getElementById("main"));
 }
 
 let running = false;

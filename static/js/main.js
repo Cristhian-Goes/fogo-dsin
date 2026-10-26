@@ -11,6 +11,28 @@ import * as intel from "./intel.js";
 import * as orders from "./orders.js";
 import * as routes from "./routes.js";
 import { go, state } from "./state.js";
+import * as ux from "./ux.js";
+
+const PRIMARY = [
+  ["cco", "Central"],
+  ["inteligencia", "O que fazer agora"],
+  ["ordens", "Ordens de serviço"],
+  ["rotas", "Rotas"],
+  ["inventario", "Equipamentos"],
+  ["agentes", "Agentes"],
+  ["previsao", "Previsões"],
+  ["impacto", "Impacto"],
+  ["acessos", "Configurações"],
+];
+const MORE = [
+  ["ocorrencias", "Ocorrências"],
+  ["frota", "Veículos"],
+  ["regioes", "Regiões"],
+  ["alertas", "Alertas"],
+  ["linha", "Linha do tempo"],
+  ["historico", "Histórico"],
+  ["campo", "Modo campo"],
+];
 
 const views = {
   cco: { mount: cco.mount, destroy: cco.destroy },
@@ -22,6 +44,7 @@ const views = {
   frota: { mount: fleet.mount, destroy: fleet.destroy },
   rotas: { mount: desk.mountRotas, destroy: desk.destroy },
   inteligencia: { mount: intel.mount, destroy: () => {} },
+  impacto: { mount: (main) => { intel.mount(main); document.getElementById("impacto")?.scrollIntoView({ block: "start" }); }, destroy: () => {} },
   regioes: { mount: desk.mountRegioes, destroy: desk.destroy },
   alertas: { mount: desk.mountAlertas, destroy: desk.destroy },
   previsao: { mount: forecast.mount, destroy: forecast.destroy },
@@ -30,12 +53,9 @@ const views = {
   acessos: { mount: admin.mount, destroy: admin.destroy },
 };
 
-const NAV = [
-  ["Operação", [["cco", "Mapa sinóptico"], ["ocorrencias", "Ocorrências"], ["rotas", "Rotas"], ["linha", "Linha do tempo"]]],
-  ["Recursos", [["agentes", "Agentes"], ["frota", "Veículos"], ["inventario", "Equipamentos"], ["ordens", "Ordens"]]],
-  ["Território", [["regioes", "Regiões"], ["alertas", "Alertas"], ["previsao", "Previsão"], ["inteligencia", "Inteligência"]]],
-  ["Registro", [["historico", "Histórico"], ["campo", "Modo campo"], ["acessos", "Acessos"]]],
-];
+function navButton(id, label) {
+  return `<button type="button" data-action="go" data-view="${id}" title="${esc(label)}">${ux.glyph(id)}<span class="nav-text">${esc(label)}</span></button>`;
+}
 
 export async function boot() {
   const app = document.getElementById("app");
@@ -65,6 +85,7 @@ export async function boot() {
   renderShell();
   state._go = show;
   show("cco");
+  ux.maybeTour(show);
   connect();
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -78,34 +99,38 @@ function renderShell() {
   const health = state.bootstrap.health;
   document.getElementById("app").innerHTML = `
     <a class="skip" href="#main">Ir para o conteúdo</a>
-    <div class="shell view-cco" id="shell">
+    <div class="shell view-cco${localStorage.getItem("fogo-nav") === "narrow" ? " is-narrow" : ""}" id="shell">
       <header>
         <div class="brand">
           <strong>F.O.G.O.</strong>
-          <span>Central de operações</span>
+          <span id="crumb">Central</span>
         </div>
         <button type="button" class="health" id="health" data-action="jump" data-jump="health" title="${esc(health.basis)}">
-          <span>Saúde operacional</span>
+          <span>Saúde da cidade</span>
           <b>${health.value}%</b>
           <span class="band-${esc(health.band)}">${esc(health.label)}</span>
-          <span>${state.bootstrap.kpis.zombies || 0} zumbis</span>
         </button>
         <form class="find" id="find" role="search">
-          <label class="sr" for="find-q">Buscar ocorrência, agente, veículo ou equipamento</label>
-          <input id="find-q" type="search" placeholder="Buscar na operação" autocomplete="off" />
+          <label class="sr" for="find-q">Buscar ocorrência, agente, veículo, equipamento ou OS</label>
+          <input id="find-q" type="search" placeholder="Buscar ou Ctrl+K" autocomplete="off" />
           <div id="find-list" hidden></div>
         </form>
         <div class="header-end">
-          <p id="who" class="who">${esc(state.user ? state.user.name + " · " + state.user.role_label : "Sem sessão")}</p>
+          <button type="button" class="ghost bell" data-action="go" data-view="alertas" title="Alertas críticos"><span class="nav-text">Alertas</span> <b id="bell">${criticalAlerts()}</b></button>
+          <button type="button" class="ghost" id="crisis-toggle" data-action="crisis-toggle" aria-pressed="false">Modo crise</button>
           <p id="clock" class="clock">${esc(clockLabel(state.bootstrap.clock))}</p>
           <p class="live" id="live"><i></i> conectando</p>
           <button type="button" class="ghost" data-action="toggle-chat">Chat</button>
-          <button type="button" class="ghost" data-action="toggle-theme">Tema</button>
+          <button type="button" class="ghost" data-action="toggle-theme" title="Alternar tema claro e escuro">Tema</button>
+          <p id="who" class="who">${esc(state.user ? state.user.name : "Sem sessão")}</p>
         </div>
       </header>
       <nav aria-label="Seções">
         <div class="nav-links">
-          ${NAV.map(([group, items]) => `<p class="nav-label">${esc(group)}</p>${items.map(([id, label]) => `<button type="button" data-action="go" data-view="${id}">${label}</button>`).join("")}`).join("")}
+          <button type="button" data-action="toggle-nav" title="Recolher menu">${ux.glyph("linha")}<span class="nav-text">Recolher</span></button>
+          ${PRIMARY.map(([id, label]) => navButton(id, label)).join("")}
+          <button type="button" data-action="toggle-more" title="Mais telas">${ux.glyph("linha")}<span class="nav-text">Mais</span></button>
+          <div id="nav-more" hidden>${MORE.map(([id, label]) => navButton(id, label)).join("")}</div>
         </div>
         <p class="credit">Desenvolvido por Cristhian</p>
       </nav>
@@ -143,11 +168,21 @@ function renderShell() {
   });
   document.addEventListener("keydown", (event) => {
     const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      ux.openPalette(show, openTarget);
+      return;
+    }
     if (event.key === "/" && !typing) {
       event.preventDefault();
       document.getElementById("chat").hidden = false;
       document.getElementById("chat-q").focus();
     }
+    if (event.key === "?" && !typing) {
+      event.preventDefault();
+      ux.openHelp();
+    }
+    if (event.key === "Escape") ux.closePalette();
     if (typing) return;
     if (event.key === "g") state.chord = "g";
     else if (state.chord === "g" && event.key === "m") {
@@ -170,7 +205,10 @@ function show(view) {
   views[state.view]?.destroy?.();
   state.view = view;
   const shell = document.getElementById("shell");
-  shell.className = `shell view-${view}`;
+  const narrow = shell.classList.contains("is-narrow");
+  shell.className = `shell view-${view}${narrow ? " is-narrow" : ""}`;
+  const crumb = document.getElementById("crumb");
+  if (crumb) crumb.textContent = ux.title(view);
   document.querySelectorAll("nav button").forEach((button) => {
     const on = button.dataset.view === view;
     button.classList.toggle("is-on", on);
@@ -198,7 +236,7 @@ async function reload(focus) {
     forecast.reload();
   } else if (state.view === "rotas") {
     routes.afterReload();
-  } else if (state.view === "inteligencia") {
+  } else if (state.view === "inteligencia" || state.view === "impacto") {
     intel.afterReload();
   } else {
     views[state.view]?.mount(document.getElementById("main"));
@@ -212,10 +250,18 @@ function paintHeader() {
   const clock = document.getElementById("clock");
   if (!node) return;
   node.title = health.basis;
-  node.innerHTML = `<span>Saúde operacional</span><b>${health.value}%</b><span class="band-${esc(health.band)}">${esc(health.label)}</span><span>${state.bootstrap.kpis.zombies || 0} zumbis</span>`;
+  node.innerHTML = `<span>Saúde da cidade</span><b>${health.value}%</b><span class="band-${esc(health.band)}">${esc(health.label)}</span>`;
+  const bell = document.getElementById("bell");
+  if (bell) bell.textContent = String(criticalAlerts());
+  const crisis = document.getElementById("crisis-toggle");
+  if (crisis) crisis.setAttribute("aria-pressed", state.crisis ? "true" : "false");
   if (clock) clock.textContent = clockLabel(state.bootstrap.clock);
   const who = document.getElementById("who");
   if (who && state.user) who.textContent = `${state.user.name} · ${state.user.role_label}`;
+}
+
+function criticalAlerts() {
+  return (state.bootstrap.alerts || []).filter((item) => item.level === "critico").length;
 }
 
 function paintLiveFlag() {
@@ -445,6 +491,39 @@ async function onClick(event) {
   if (action === "agent-filter") {
     state.agentFilter = button.dataset.filter;
     desk.mountAgentes(document.getElementById("main"));
+  }
+  if (action === "clear-eq-filter") {
+    state.equipmentStatus = "";
+    state.region = "";
+    inventory.mount(document.getElementById("main"));
+  }
+  if (action === "toggle-nav") {
+    const shell = document.getElementById("shell");
+    shell.classList.toggle("is-narrow");
+    localStorage.setItem("fogo-nav", shell.classList.contains("is-narrow") ? "narrow" : "wide");
+    if (state.view === "cco") setTimeout(() => cco.refresh(), 60);
+  }
+  if (action === "toggle-more") {
+    const more = document.getElementById("nav-more");
+    if (more) more.hidden = !more.hidden;
+  }
+  if (action === "crisis-toggle") {
+    if (state.crisis) {
+      state.crisis = null;
+      if (state.view === "cco") cco.refresh();
+      paintHeader();
+      return;
+    }
+    const incident = (state.bootstrap.incidents || []).find((item) => item.priority === "critica" && item.status === "aberto");
+    if (!incident) {
+      toast("Nenhuma ocorrência crítica aberta.", "bad");
+      return;
+    }
+    state.crisis = incident.id;
+    state.selected = { kind: "incident", id: incident.id };
+    if (state.view !== "cco") show("cco");
+    else cco.refresh();
+    paintHeader();
   }
   if (action === "crisis") {
     state.crisis = button.dataset.id;

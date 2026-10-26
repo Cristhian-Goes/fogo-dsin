@@ -43,6 +43,7 @@ const TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 export function mount(main) {
   main.innerHTML = `
     <section class="cco">
+      <div class="kpi-strip" aria-label="Indicadores da operação">${kpiStrip()}</div>
       <div class="map-wrap">
         <div id="map" role="application" aria-label="Mapa operacional de Marília, Assis e Cândido Mota"></div>
         <div class="map-tools">
@@ -132,6 +133,8 @@ export function destroy() {
 
 export function paintLive() {
   if (!map || state.view !== "cco") return;
+  const strip = document.querySelector(".kpi-strip");
+  if (strip) strip.innerHTML = kpiStrip();
   drawMap();
   const panel = document.getElementById("ops-panel");
   if (panel && panel.contains(document.activeElement)) return;
@@ -140,6 +143,8 @@ export function paintLive() {
 
 export function refresh() {
   if (!map || state.view !== "cco") return;
+  const strip = document.querySelector(".kpi-strip");
+  if (strip) strip.innerHTML = kpiStrip();
   drawMap();
   paintPanel();
   syncLayerCounts();
@@ -525,6 +530,18 @@ function current() {
     return { lat: source.polyline[0][0], lng: source.polyline[0][1], title: source.label || agent.team, agent };
   }
   return null;
+}
+
+function kpiStrip() {
+  const k = state.bootstrap.kpis || {};
+  const card = (value, label, hint) => `<div class="kpi" title="${esc(hint)}"><b>${esc(value)}</b><span>${esc(label)}</span></div>`;
+  return [
+    card(k.total ?? "—", "Total", "Equipamentos cadastrados"),
+    card(k.operational ?? "—", "Operacionais", "Situação operacional"),
+    card(k.unavailable ?? "—", "Indisponíveis", "Fora de operação, em manutenção, desativados ou furtados"),
+    card(`${k.availability_pct ?? "—"}%`, "Disponibilidade", "Operacionais divididos pelos equipamentos já instalados"),
+    card(k.agents_active ?? "—", "Agentes ativos", "Agentes em atividade neste turno"),
+  ].join("");
 }
 
 function panelHtml() {
