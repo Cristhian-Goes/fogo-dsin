@@ -666,8 +666,21 @@ function optionLine(option) {
   return `${String(option.distance_km).replace(".", ",")} km · ${option.duration_min} min · ${money(option.total_cost)} · ${String(option.amount).replace(".", ",")} ${esc(option.amount_unit)}`;
 }
 
+function canDispatch() {
+  return !!state.user?.can_dispatch;
+}
+
+function canWrite() {
+  return !!state.user?.can_write;
+}
+
+function canOpen(view) {
+  const open = state.user?.views;
+  return !Array.isArray(open) || !open.length || open.includes(view);
+}
+
 function vehicleBlock(incident) {
-  if (state.replay || incident.status !== "aberto") return "";
+  if (state.replay || incident.status !== "aberto" || !canDispatch()) return "";
   const current = quoteIncident === incident.id ? quotes : null;
   const rows = current?.rows || [];
   const fastestId = current?.recommendation?.fastest_vehicle_id;
@@ -719,19 +732,19 @@ function incidentDetail(incident) {
         ${(incident.nearby || []).map((team) => `
           <li class="team${team.recommended ? " is-recommended" : ""}">
             <span><b>${esc(team.team)}</b>${team.recommended ? " · recomendada" : ""}${team.stale ? " · disponibilidade não confirmada" : ""}<br>${esc(team.name)} · ${esc(team.specialty || "")}</span>
-            <button type="button" class="primary" data-action="dispatch" data-incident="${esc(incident.id)}" data-agent="${esc(team.id)}" data-team="${esc(team.team)}">Atribuir</button>
+            ${canDispatch() ? `<button type="button" class="primary" data-action="dispatch" data-incident="${esc(incident.id)}" data-agent="${esc(team.id)}" data-team="${esc(team.team)}">Atribuir</button>` : ""}
             <span>${esc(String(team.km).replace(".", ","))} km · ETA ${team.eta_min} min · ${esc(team.duty_label)} · sinal ${esc(team.signal || "atualizado")}</span>
             <p class="hint">${esc(team.reason || "")}</p>
             <p class="hint">Se enviar esta equipe: ${esc(team.impact || "")}</p>
           </li>`).join("") || "<li>Nenhuma equipe livre neste turno.</li>"}
       </ul>`;
-  } else if (!state.replay && incident.assigned_agent_id && incident.status !== "encerrada") {
+  } else if (!state.replay && incident.assigned_agent_id && incident.status !== "encerrada" && (canDispatch() || state.user?.role === "agente")) {
     actions = `
       <div class="actions">
         ${incident.status === "em_deslocamento" ? `<button type="button" class="primary" data-action="advance" data-id="${esc(incident.id)}" data-step="chegou">Chegou</button>` : ""}
         ${incident.status === "no_local" || incident.status === "em_deslocamento" ? `<button type="button" class="primary" data-action="advance" data-id="${esc(incident.id)}" data-step="iniciar">Registrar atendimento</button>` : ""}
         <button type="button" class="ghost" data-action="advance" data-id="${esc(incident.id)}" data-step="finalizar">Finalizar</button>
-        <button type="button" class="ghost" data-action="field-open" data-id="${esc(incident.assigned_agent_id)}">Modo campo</button>
+        ${canOpen("campo") ? `<button type="button" class="ghost" data-action="field-open" data-id="${esc(incident.assigned_agent_id)}">Modo campo</button>` : ""}
       </div>
       <label class="field">Nota do atendimento<textarea id="desk-note" rows="2"></textarea></label>`;
   }
@@ -789,10 +802,10 @@ function equipmentDetail(eq) {
         <dt>Manutenção</dt><dd>${esc(eq.next_maintenance || "sem data")}</dd>
         <dt>Se parar</dt><dd>${esc(impactOf(eq))}</dd>
       </dl>
-      <div class="actions">
+      ${canWrite() && canOpen("inventario") ? `<div class="actions">
         <button type="button" class="ghost" data-action="edit" data-kind="equipment" data-id="${esc(eq.id)}">Editar cadastro</button>
         <button type="button" class="primary" data-action="schedule" data-id="${esc(eq.id)}">Agendar manutenção</button>
-      </div>
+      </div>` : ""}
       <h3>Histórico</h3>
       ${(eq.history || []).length ? `<ul class="timeline">${eq.history.map((event) => `<li><time>${esc(clockLabel(event.at))}</time>${esc(event.text)}</li>`).join("")}</ul>` : "<p class='hint'>Sem eventos registrados além do estado atual.</p>"}
     </article>`;
@@ -817,9 +830,9 @@ function agentDetail(agent) {
       </dl>
       ${agent.plan ? `<p>Rota ${esc(agent.plan.status || "planejada")}: ${agent.plan.stops.length} pontos, ${String(agent.plan.distance_km).replace(".", ",")} km, cerca de ${agent.plan.duration_min} min. ${esc(agent.plan.traffic_note || "")}</p>` : ""}
       <div class="actions">
-        <button type="button" class="primary" data-action="field-open" data-id="${esc(agent.id)}">Modo campo</button>
-        <button type="button" class="ghost" data-action="open-route" data-agent="${esc(agent.id)}" data-region="${esc(agent.region)}">Criar rota</button>
-        <button type="button" class="ghost" data-action="edit" data-kind="agent" data-id="${esc(agent.id)}">Editar cadastro</button>
+        ${canOpen("campo") ? `<button type="button" class="primary" data-action="field-open" data-id="${esc(agent.id)}">Modo campo</button>` : ""}
+        ${canOpen("rotas") && canDispatch() ? `<button type="button" class="ghost" data-action="open-route" data-agent="${esc(agent.id)}" data-region="${esc(agent.region)}">Criar rota</button>` : ""}
+        ${canWrite() && canOpen("agentes") ? `<button type="button" class="ghost" data-action="edit" data-kind="agent" data-id="${esc(agent.id)}">Editar cadastro</button>` : ""}
       </div>
     </article>`;
 }
@@ -842,8 +855,8 @@ function regionDetail(region) {
       </dl>
       <div class="actions">
         <button type="button" class="primary" data-action="filter-region" data-region="${esc(region.region)}">Filtrar mapa</button>
-        <button type="button" class="ghost" data-action="jump-region" data-region="${esc(region.region)}">Ocorrências da região</button>
-        <button type="button" class="ghost" data-action="open-route" data-region="${esc(region.region)}">Criar rota</button>
+        ${canOpen("ocorrencias") ? `<button type="button" class="ghost" data-action="jump-region" data-region="${esc(region.region)}">Ocorrências da região</button>` : ""}
+        ${canOpen("rotas") && canDispatch() ? `<button type="button" class="ghost" data-action="open-route" data-region="${esc(region.region)}">Criar rota</button>` : ""}
         <button type="button" class="ghost" data-action="clear-region">Ver a operação</button>
       </div>
     </article>`;

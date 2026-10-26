@@ -13,13 +13,14 @@ const COLUMNS = [
 export function mount(main) {
   const orders = state.bootstrap.orders || [];
   const late = orders.filter((item) => item.overdue).length;
+  const write = !!state.user?.can_write;
   main.innerHTML = `
     <section class="page">
       <header class="page-head">
         <h1>Ordens de serviço</h1>
         <p>${orders.length} no quadro. ${late} com o prazo estourado. A abertura automática acontece em mau funcionamento, furto ou manutenção vencida.</p>
       </header>
-      <form id="os-new" class="inv-toolbar">
+      ${write ? `<form id="os-new" class="inv-toolbar">
         <select name="equipment_id" required>
           <option value="">Equipamento</option>
           ${(state.bootstrap.equipment || []).map((item) => `<option value="${esc(item.id)}">${esc(item.serial)} · ${esc(item.street || "")}</option>`).join("")}
@@ -38,7 +39,7 @@ export function mount(main) {
         </select>
         <input name="description" required placeholder="Descrição" />
         <button type="submit" class="primary">Abrir OS</button>
-      </form>
+      </form>` : ""}
       <div class="kanban">
         ${COLUMNS.map(([id, label]) => `
           <section data-column="${id}">
@@ -47,7 +48,7 @@ export function mount(main) {
           </section>`).join("")}
       </div>
     </section>`;
-  document.getElementById("os-new").addEventListener("submit", async (event) => {
+  document.getElementById("os-new")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(event.target).entries());
     event.target.querySelector("button").disabled = true;
@@ -61,6 +62,10 @@ export function mount(main) {
   });
   main.querySelectorAll(".os-card").forEach((cardNode) => {
     cardNode.addEventListener("dragstart", (event) => {
+      if (event.target.closest("button, a, input")) {
+        event.preventDefault();
+        return;
+      }
       event.dataTransfer.setData("text/plain", cardNode.dataset.order);
     });
   });
@@ -86,17 +91,17 @@ function card(item) {
   const left = item.seconds_left;
   const clock = left >= 0 ? `faltam ${Math.floor(left / 3600)} h` : `vencida há ${Math.floor(-left / 3600)} h`;
   return `
-    <article class="os-card${item.overdue ? " is-late" : ""}" draggable="true" data-order="${esc(item.id)}" data-status="${esc(item.status)}">
+    <article class="os-card${item.overdue ? " is-late" : ""}" draggable="${state.user?.can_write ? "true" : "false"}" data-order="${esc(item.id)}" data-status="${esc(item.status)}">
       <b>${esc(item.number)}</b>
       <p>${esc(item.serial || "")} · <span class="pill tone-${item.priority === "critica" ? "bad" : item.priority === "alta" ? "warn" : "info"}"><i></i>${esc(item.priority)}</span> · ${esc(item.kind)}</p>
       <p>${esc(item.description || "")}</p>
       <p class="hint">${esc(item.agent_name || "Sem responsável")} · ${clock} · ${esc(clockLabel(item.due_at))}</p>
       <div class="actions">
-        ${item.status === "aberta" ? `<button type="button" class="primary" data-action="os-assign" data-id="${esc(item.id)}">Atribuir o mais próximo</button>` : ""}
-        ${item.status === "atribuida" ? `<button type="button" class="primary" data-action="os-status" data-id="${esc(item.id)}" data-status="em_execucao">Iniciar</button>` : ""}
-        ${item.status === "em_execucao" ? `<button type="button" class="primary" data-action="os-status" data-id="${esc(item.id)}" data-status="concluida">Concluir</button>` : ""}
-        ${item.status !== "concluida" && item.status !== "cancelada" ? `<button type="button" class="ghost" data-action="os-status" data-id="${esc(item.id)}" data-status="cancelada">Cancelar</button>` : ""}
-        <button type="button" class="ghost" data-action="os-pdf" data-id="${esc(item.id)}">PDF</button>
+        ${state.user?.can_write && item.status === "aberta" ? `<button type="button" class="primary" data-action="os-assign" data-id="${esc(item.id)}">Atribuir o mais próximo</button>` : ""}
+        ${state.user?.can_write && item.status === "atribuida" ? `<button type="button" class="primary" data-action="os-status" data-id="${esc(item.id)}" data-status="em_execucao">Iniciar</button>` : ""}
+        ${state.user?.can_write && item.status === "em_execucao" ? `<button type="button" class="primary" data-action="os-status" data-id="${esc(item.id)}" data-status="concluida">Concluir</button>` : ""}
+        ${state.user?.can_write && item.status !== "concluida" && item.status !== "cancelada" ? `<button type="button" class="ghost" data-action="os-status" data-id="${esc(item.id)}" data-status="cancelada">Cancelar</button>` : ""}
+        <button type="button" class="ghost" data-action="os-pdf" data-id="${esc(item.id)}">Baixar PDF</button>
       </div>
     </article>`;
 }

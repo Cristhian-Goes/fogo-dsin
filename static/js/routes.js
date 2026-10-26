@@ -14,7 +14,7 @@ export function paint(node) {
   paintedAt = plan.created_at || "";
   const crews = plan.crews || [];
   node.innerHTML = `
-    <section class="page-block">
+    <section class="route-section">
       <h2>Rotas do dia</h2>
       <p class="hint">${esc(plan.factor_note || "Calcule para ver distância, ETA e o comparativo com a rota ingênua.")} ${esc(plan.matrix_note || "")}</p>
       <p class="hint">${plan.stop_count ? `${plan.stop_count} paradas. Ingênua ${plan.naive_min} min · otimizada ${plan.optimized_min} min · ${_delta(plan.saved_min)} na mesma matriz.` : "Ainda sem rota calculada. O cenário deixa pelo menos 12 OS abertas e 3 equipes."}</p>

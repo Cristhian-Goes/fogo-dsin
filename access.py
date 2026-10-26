@@ -29,15 +29,53 @@ def access_file() -> Path:
 def geo_file() -> Path:
     return data_dir() / "geo-cache.json"
 DEMO_PASSWORD = "demonstracao"
+ADMIN_EMAIL = "fogo@adm"
+ADMIN_PASSWORD = "Fogo2026!"
+
+DEFAULT_GROUPS = [
+    ("GP-ADM", "Administrador", "administrador"),
+    ("GP-ESTADUAL", "Gestor estadual", "gestor_estadual"),
+    ("GP-MUNICIPAL", "Gestor municipal", "gestor_municipal"),
+    ("GP-SUPERVISAO", "Supervisor", "supervisor"),
+    ("GP-CCO", "Operador da CCO", "operador"),
+    ("GP-CAMPO", "Agente de campo", "agente"),
+    ("GP-AUDITORIA", "Auditor", "auditor"),
+]
+
+SCREENS = [
+    ("cco", "Central"),
+    ("inteligencia", "O que fazer agora"),
+    ("ordens", "Ordens de serviço"),
+    ("rotas", "Rotas"),
+    ("inventario", "Equipamentos"),
+    ("agentes", "Agentes"),
+    ("previsao", "Previsões"),
+    ("impacto", "Impacto"),
+    ("ocorrencias", "Ocorrências"),
+    ("frota", "Veículos"),
+    ("regioes", "Regiões"),
+    ("alertas", "Alertas"),
+    ("linha", "Linha do tempo"),
+    ("historico", "Histórico"),
+    ("campo", "Modo campo"),
+    ("acessos", "Configurações"),
+]
+SCREEN_LABEL = dict(SCREENS)
+_ALL = [item[0] for item in SCREENS]
+_DESK = ["cco", "inteligencia", "ordens", "rotas", "ocorrencias", "alertas", "agentes", "frota"]
+_SHIFT = _DESK + ["inventario", "previsao", "linha"]
+_CITY = _SHIFT + ["regioes"]
+_STATE = [item for item in _ALL if item not in ("acessos", "campo")]
+_AUDIT = ["cco", "ordens", "inventario", "previsao", "impacto", "regioes", "alertas", "linha", "historico"]
 
 ROLES = {
-    "administrador": {"label": "Administrador geral", "write": True, "dispatch": True, "admin": True, "scope": "brasil"},
-    "gestor_estadual": {"label": "Gestor estadual", "write": True, "dispatch": True, "admin": False, "scope": "uf"},
-    "gestor_municipal": {"label": "Gestor municipal", "write": True, "dispatch": True, "admin": False, "scope": "municipio"},
-    "supervisor": {"label": "Supervisor operacional", "write": True, "dispatch": True, "admin": False, "scope": "operacao"},
-    "operador": {"label": "Operador da CCO", "write": True, "dispatch": True, "admin": False, "scope": "operacao"},
-    "agente": {"label": "Agente de campo", "write": False, "dispatch": False, "admin": False, "scope": "proprio"},
-    "auditor": {"label": "Auditor", "write": False, "dispatch": False, "admin": False, "scope": "operacao"},
+    "administrador": {"label": "Administrador", "write": True, "dispatch": True, "admin": True, "scope": "brasil", "views": _ALL},
+    "gestor_estadual": {"label": "Gestor estadual", "write": True, "dispatch": True, "admin": False, "scope": "uf", "views": _STATE},
+    "gestor_municipal": {"label": "Gestor municipal", "write": True, "dispatch": True, "admin": False, "scope": "municipio", "views": _CITY},
+    "supervisor": {"label": "Supervisor", "write": True, "dispatch": True, "admin": False, "scope": "operacao", "views": _SHIFT},
+    "operador": {"label": "Operador da CCO", "write": True, "dispatch": True, "admin": False, "scope": "operacao", "views": _DESK},
+    "agente": {"label": "Agente de campo", "write": False, "dispatch": False, "admin": False, "scope": "proprio", "views": ["campo"]},
+    "auditor": {"label": "Auditor", "write": False, "dispatch": False, "admin": False, "scope": "operacao", "views": _AUDIT},
 }
 
 OPERATION_CITIES = {"Marília", "Assis", "Cândido Mota"}
@@ -116,9 +154,72 @@ def _blank() -> dict:
             "uf": uf,
             "city": city,
             "role": role,
+            "group_id": _group_for_role(role),
             "active": True,
         })
-    return {"users": users, "audit": []}
+    users.insert(0, _admin_record())
+    return {"users": users, "groups": _default_groups(), "audit": []}
+
+
+def _default_groups() -> list[dict]:
+    return [{"id": gid, "name": name, "role": role, "uf": "SP", "city": "", "active": True} for gid, name, role in DEFAULT_GROUPS]
+
+
+def _group_for_role(role: str) -> str:
+    for gid, _name, group_role in DEFAULT_GROUPS:
+        if group_role == role:
+            return gid
+    return "GP-CCO"
+
+
+def _admin_record() -> dict:
+    return {
+        "id": "US-ADM",
+        "name": "Administrador",
+        "email": ADMIN_EMAIL,
+        "password": _hash(ADMIN_PASSWORD),
+        "registration": "",
+        "agency": "Central de operações",
+        "uf": "SP",
+        "city": "Marília",
+        "role": "administrador",
+        "group_id": "GP-ADM",
+        "active": True,
+    }
+
+
+def _ensure_accounts(data: dict) -> bool:
+    changed = False
+    data.setdefault("groups", [])
+    by_id = {item.get("id"): item for item in data["groups"]}
+    for item in _default_groups():
+        current = by_id.get(item["id"])
+        if not current:
+            data["groups"].append(item)
+            changed = True
+            continue
+        if current.get("name") != item["name"] or current.get("role") != item["role"]:
+            current["name"] = item["name"]
+            current["role"] = item["role"]
+            changed = True
+    role_of = {gid: role for gid, _name, role in DEFAULT_GROUPS}
+    for user in data["users"]:
+        expected = role_of.get(user.get("group_id"))
+        if expected and user.get("role") != expected:
+            user["role"] = expected
+            changed = True
+    if not any(item.get("email", "").lower() == ADMIN_EMAIL for item in data["users"]):
+        data["users"].insert(0, _admin_record())
+        changed = True
+    for user in data["users"]:
+        if not user.get("group_id"):
+            user["group_id"] = _group_for_role(user.get("role") or "operador")
+            changed = True
+    return changed
+
+
+def _group(group_id: str) -> dict:
+    return next((item for item in load().get("groups") or [] if item.get("id") == group_id), {})
 
 
 def load() -> dict:
@@ -130,6 +231,9 @@ def load() -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     data.setdefault("users", [])
     data.setdefault("audit", [])
+    changed = _ensure_accounts(data)
+    if changed:
+        save(data)
     return data
 
 
@@ -146,6 +250,7 @@ SESSIONS: dict[str, str] = {}
 
 def public_user(user: dict) -> dict:
     role = ROLES[user["role"]]
+    group = _group(user.get("group_id") or "")
     return {
         "id": user["id"],
         "name": user["name"],
@@ -156,10 +261,13 @@ def public_user(user: dict) -> dict:
         "city": user.get("city") or "",
         "role": user["role"],
         "role_label": role["label"],
+        "group_id": group.get("id") or "",
+        "group_name": group.get("name") or "Sem grupo",
         "active": user.get("active", True),
         "can_write": role["write"],
         "can_dispatch": role["dispatch"],
         "can_admin": role["admin"],
+        "views": list(role.get("views") or []),
     }
 
 
@@ -179,9 +287,21 @@ def login(email: str, password: str) -> dict:
     found = next((item for item in data["users"] if item["email"].lower() == email.strip().lower()), None)
     if not found or not found.get("active") or not _check(password, found["password"]):
         raise Denied("E-mail ou senha não conferem.")
+    return _open_session(found, found["email"])
+
+
+def login_identity(email: str, via: str) -> dict:
+    data = load()
+    found = next((item for item in data["users"] if item["email"].lower() == email.strip().lower() and item.get("active")), None)
+    if not found:
+        raise Denied("Esta identidade da Cloudflare não tem usuário na central. O administrador cria a conta em Acessos.")
+    return _open_session(found, f"{found['email']} · {via}")
+
+
+def _open_session(found: dict, detail: str) -> dict:
     token = secrets.token_urlsafe(24)
     SESSIONS[token] = found["id"]
-    audit(found, "entrou", found["email"])
+    audit(found, "entrou", detail)
     return {"token": token, "user": public_user(found)}
 
 
@@ -195,6 +315,11 @@ def require(token: str | None) -> dict:
     if not user:
         raise Denied("Entre com um perfil para fazer esta operação.")
     return user
+
+
+def require_view(user: dict, view: str) -> None:
+    if view not in (ROLES.get(user["role"], {}).get("views") or []):
+        raise Denied(f"Seu perfil não acessa {SCREEN_LABEL.get(view, view)}.")
 
 
 def guard(user: dict, kind: str) -> None:
@@ -271,6 +396,10 @@ def create_user(actor: dict, body: dict) -> dict:
     if len(password) < 8:
         raise model.Invalid("A senha precisa ter pelo menos 8 caracteres.")
     data = load()
+    group_id = str(body.get("group_id") or _group_for_role(role)).strip()
+    group = next((item for item in data.get("groups") or [] if item.get("id") == group_id and item.get("active", True)), None)
+    if not group:
+        raise model.Invalid("Escolha um grupo ativo.")
     if any(item["email"] == email for item in data["users"]):
         raise model.Invalid("Já existe um usuário com este e-mail.")
     user = {
@@ -280,15 +409,80 @@ def create_user(actor: dict, body: dict) -> dict:
         "password": _hash(password),
         "registration": str(body.get("registration") or "").strip(),
         "agency": str(body.get("agency") or "").strip(),
-        "uf": str(body.get("uf") or "").strip().upper(),
-        "city": str(body.get("city") or "").strip(),
+        "uf": str(body.get("uf") or group.get("uf") or "").strip().upper(),
+        "city": str(body.get("city") or group.get("city") or "").strip(),
         "role": role,
+        "group_id": group_id,
         "active": True,
     }
     data["users"].append(user)
     save(data)
-    audit(actor, "criou usuário", f"{email} · {ROLES[role]['label']}")
+    audit(actor, "criou usuário", f"{email} · {ROLES[role]['label']} · {group['name']}")
     return public_user(user)
+
+
+def list_groups(actor: dict) -> list[dict]:
+    guard(actor, "admin")
+    return [_public_group(item) for item in load().get("groups") or []]
+
+
+def create_group(actor: dict, body: dict) -> dict:
+    guard(actor, "admin")
+    name = str(body.get("name") or "").strip()
+    role = str(body.get("role") or "")
+    if not name:
+        raise model.Invalid("Informe o nome do grupo.")
+    if role not in ROLES:
+        raise model.Invalid("Escolha o acesso deste grupo.")
+    data = load()
+    group = {
+        "id": "GP-" + secrets.token_hex(3).upper(),
+        "name": name,
+        "role": role,
+        "uf": str(body.get("uf") or "").strip().upper(),
+        "city": str(body.get("city") or "").strip(),
+        "active": True,
+    }
+    data.setdefault("groups", []).append(group)
+    save(data)
+    audit(actor, "criou grupo", f"{name} · {ROLES[role]['label']}")
+    return _public_group(group)
+
+
+def update_group(actor: dict, group_id: str, body: dict) -> dict:
+    guard(actor, "admin")
+    data = load()
+    group = next((item for item in data.get("groups") or [] if item.get("id") == group_id), None)
+    if not group:
+        raise model.Invalid("Grupo não encontrado.")
+    if "name" in body and str(body["name"]).strip():
+        group["name"] = str(body["name"]).strip()
+    if "role" in body:
+        if body["role"] not in ROLES:
+            raise model.Invalid("Acesso inválido.")
+        group["role"] = body["role"]
+    if "active" in body:
+        group["active"] = bool(body["active"])
+    for key in ("uf", "city"):
+        if key in body:
+            group[key] = str(body[key]).strip()
+    save(data)
+    audit(actor, "alterou grupo", f"{group['name']} · {ROLES[group['role']]['label']}")
+    return _public_group(group)
+
+
+def _public_group(group: dict) -> dict:
+    role = ROLES.get(group.get("role") or "", {})
+    return {
+        "id": group.get("id"),
+        "name": group.get("name") or "",
+        "role": group.get("role") or "",
+        "role_label": role.get("label") or group.get("role") or "",
+        "uf": group.get("uf") or "",
+        "city": group.get("city") or "",
+        "active": group.get("active", True),
+        "screens": [SCREEN_LABEL[item] for item in ROLES.get(group.get("role") or "", {}).get("views") or []],
+    }
 
 
 def update_user(actor: dict, uid: str, body: dict) -> dict:
@@ -301,10 +495,25 @@ def update_user(actor: dict, uid: str, body: dict) -> dict:
     user = next((item for item in data["users"] if item["id"] == uid), None)
     if not user:
         raise model.Invalid("Usuário não encontrado.")
-    if "role" in body:
+    if "group_id" in body:
+        group_id = str(body.get("group_id") or "").strip()
+        group = next((item for item in data.get("groups") or [] if item.get("id") == group_id), None)
+        if group_id and not group:
+            raise model.Invalid("Grupo inválido.")
+        user["group_id"] = group_id
+        if group and group.get("role") in ROLES:
+            user["role"] = group["role"]
+    elif "role" in body:
         if body["role"] not in ROLES:
             raise model.Invalid("Perfil inválido.")
         user["role"] = body["role"]
+        user["group_id"] = _group_for_role(body["role"])
+    if uid == actor["id"] and user["role"] != actor["role"]:
+        raise Denied("Você não altera o próprio perfil.")
+    if "password" in body and str(body.get("password") or ""):
+        if len(str(body["password"])) < 8:
+            raise model.Invalid("A senha precisa ter pelo menos 8 caracteres.")
+        user["password"] = _hash(str(body["password"]))
     if "active" in body:
         user["active"] = bool(body["active"])
         if not user["active"]:

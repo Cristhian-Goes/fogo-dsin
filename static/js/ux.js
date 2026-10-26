@@ -99,6 +99,8 @@ export function openHelp() {
 
 export function maybeTour(show) {
   if (localStorage.getItem("fogo-tour") === "done") return;
+  const open = state.user?.views || [];
+  if (open.length && ["cco", "inteligencia", "ordens", "rotas"].some((view) => !open.includes(view))) return;
   const steps = [
     ["cco", "Central", "O mapa fica no centro. A coluna da direita responde o que exige atenção agora."],
     ["inteligencia", "O que fazer agora", "A fila tem no máximo 7 ações, com o motivo e quem deve fazer."],
@@ -140,6 +142,14 @@ function paintPalette(query, go, openTarget) {
   const list = document.getElementById("palette-list");
   if (!list) return;
   const q = query.trim().toLowerCase();
+  const open = state.user?.views;
+  const destination = { equipment: "inventario", agent: "agentes", order: "ordens", region: "regioes" };
+  const canOpen = (item) => {
+    if (!Array.isArray(open) || !open.length) return true;
+    if (item.kind === "view") return open.includes(item.id);
+    const view = destination[item.kind];
+    return !view || open.includes(view);
+  };
   const commands = Object.entries(TITLES).map(([id, label]) => ({ kind: "view", id, label: `Ir para ${label}` }));
   const pack = state.bootstrap || {};
   const rows = [
@@ -148,7 +158,7 @@ function paintPalette(query, go, openTarget) {
     ...(pack.agents || []).map((item) => ({ kind: "agent", id: item.id, label: `${item.name} · ${item.team}` })),
     ...(pack.orders || []).slice(0, 40).map((item) => ({ kind: "order", id: item.id, label: `${item.number} · ${item.serial || ""}` })),
     ...(pack.regions || []).map((item) => ({ kind: "region", id: item.region, label: item.region })),
-  ].filter((item) => !q || item.label.toLowerCase().includes(q)).slice(0, 8);
+  ].filter((item) => canOpen(item) && (!q || item.label.toLowerCase().includes(q))).slice(0, 8);
   list.innerHTML = rows.map((item) => `<button type="button" data-palette="${esc(item.kind)}" data-id="${esc(item.id)}">${esc(item.label)}</button>`).join("") || "<p class='hint'>Nada encontrado. Limpe a busca para ver as telas.</p>";
   list.querySelectorAll("button").forEach((button) => {
     button.addEventListener("click", () => {

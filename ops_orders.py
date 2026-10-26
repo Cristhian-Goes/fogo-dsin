@@ -95,15 +95,20 @@ def advance(data: dict, order_id: str, status: str, note: str, moment: datetime,
 def pdf(data: dict, order_id: str, moment: datetime) -> bytes:
     order = present(model._must(data.get("orders") or [], order_id, "Ordem de serviço"), moment)
     lines = [
-        f"OS {order['number']}",
-        f"Equipamento: {order.get('serial')} · {order.get('street')}",
-        f"Tipo: {order['kind']} · Prioridade: {order['priority']}",
+        f"F.O.G.O.  Ordem de servico {order['number']}",
+        f"Equipamento: {order.get('serial')}  {order.get('street')}",
+        f"Regiao: {order.get('region') or '-'}",
+        f"Tipo: {order['kind']}   Prioridade: {order['priority']}",
         f"Status: {order['status']}",
-        f"Responsável: {order.get('agent_name') or 'não atribuída'}",
+        f"Responsavel: {order.get('agent_name') or 'nao atribuida'}",
         f"Aberta: {order['opened_at']}",
         f"Limite: {order['due_at']}",
-        f"Descrição: {order.get('description') or ''}",
+        f"Descricao: {order.get('description') or '-'}",
+        "",
+        "Historico",
     ]
+    for event in (order.get("events") or [])[:8]:
+        lines.append(f"- {event.get('at', '')[:16]}  {event.get('text', '')}")
     return _pdf(lines)
 
 
@@ -193,8 +198,16 @@ def _event(order: dict, moment: datetime, text: str) -> None:
     order["events"] = order["events"][:20]
 
 
+def _plain(text: str) -> str:
+    folded = str(text).translate(str.maketrans(
+        "áàâãäéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ",
+        "aaaaaeeeeiiiiooooouuuucnAAAAAEEEEIIIIOOOOOUUUUCN",
+    ))
+    return folded.replace("\\", " ").replace("(", " ").replace(")", " ")[:90]
+
+
 def _pdf(lines: list[str]) -> bytes:
-    safe = [line.replace("\\", " ").replace("(", " ").replace(")", " ")[:90] for line in lines]
+    safe = [_plain(line) for line in lines]
     commands = ["BT", "/F1 12 Tf", "50 800 Td"]
     for index, line in enumerate(safe):
         if index:

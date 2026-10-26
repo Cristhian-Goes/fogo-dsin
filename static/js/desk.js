@@ -8,6 +8,8 @@ let routeMap;
 let routeAgentId = "";
 let routeStops = [];
 let routeRegion = "";
+let routeQuery = "";
+let routeOnlyRegion = true;
 
 const FILTERS = [
   ["todas", "Todas"],
@@ -187,46 +189,66 @@ export function mountRotas(main) {
   const agents = state.bootstrap.agents.filter((agent) => agent.duty !== "indisponivel");
   if (!routeAgentId && agents[0]) routeAgentId = agents[0].id;
   const agent = state.bootstrap.agents.find((item) => item.id === routeAgentId);
+  if (!routeStops.length && agent?.plan?.stops?.length) {
+    routeStops = agent.plan.stops.map((stop) => ({ kind: stop.kind, id: stop.id }));
+  }
   const choices = routeChoices();
   main.innerHTML = `
-    <div id="day-board"></div>
-    <section class="page">
-      <h1>Rotas</h1>
-      <p class="hint">Em andamento ${live} · Planejadas ${planned} · Encerradas com atraso registrado ${delayed} · Com ocorrência ${withIncident}. Só entram percursos com geometria viária.</p>
-      <ul class="rows">
-        ${records.map((item) => `
-          <li><button type="button" class="row" data-action="select" data-kind="route" data-id="${esc(item.id)}">
-            <b>${esc(item.name)} · ${esc(item.status)}</b>
-            <span>${esc(item.team)} · ${esc(item.agent)} · ${esc(item.vehicle)}</span>
-            <small>${esc(item.region)} · ${String(item.km).replace(".", ",")} km · ${item.minutes} min · ${item.stops} parada(s)</small>
-          </button></li>`).join("") || "<li>Nenhuma rota viária neste momento. Gere uma sequência abaixo.</li>"}
-      </ul>
-      <h2>Nova sequência</h2>
-      <p class="hint">Escolha a equipe e os destinos. Sem resposta do serviço em 3 s, a tela mostra uma estimativa aproximada e não trata o traço como rua.</p>
-      ${routeRegion ? `<p class="hint">Origem sugerida pela região ${esc(routeRegion)}. Os pontos abaixo estão filtrados por ela.</p>` : ""}
-      <div class="route-layout">
-        <form id="route-form">
-          <label class="field">Equipe
-            <select name="agent" id="route-agent">
-              ${agents.map((item) => `<option value="${esc(item.id)}" ${item.id === routeAgentId ? "selected" : ""}>${esc(item.team)} · ${esc(item.name)} · ${esc(item.duty_label)}</option>`).join("")}
-            </select>
-          </label>
-          <fieldset>
-            <legend>Pontos</legend>
-            ${choices.map((item) => `
-              <label class="check"><input type="checkbox" data-stop-kind="${esc(item.kind)}" data-stop-id="${esc(item.id)}" ${routeStops.some((stop) => stop.id === item.id) ? "checked" : ""}/> ${esc(item.label)}</label>`).join("")}
-          </fieldset>
-          <div class="actions">
-            <button type="button" class="ghost" data-action="suggest-route">Rota de inspeção sugerida</button>
-            <button type="button" class="primary" data-action="plan-route">Gerar sequência</button>
-          </div>
-          <div id="route-result">${routeResult(agent)}</div>
-        </form>
-        <div>
-          <div id="route-map"></div>
-          <p class="hint">O mapa desta tela mostra a rota da equipe selecionada, quando ela tiver geometria viária.</p>
-        </div>
+    <section class="page route-page">
+      <div class="route-section">
+        <h1>Rotas</h1>
+        <p>Em andamento ${live} · Planejadas ${planned} · Encerradas com atraso registrado ${delayed} · Com ocorrência ${withIncident}.</p>
       </div>
+      <div id="day-board"></div>
+      <section class="route-section">
+        <h2>Percursos com geometria viária</h2>
+        <ul class="rows">
+          ${records.map((item) => `
+            <li><button type="button" class="row" data-action="select" data-kind="route" data-id="${esc(item.id)}">
+              <b>${esc(item.name)} · ${esc(item.status)}</b>
+              <span>${esc(item.team)} · ${esc(item.agent)} · ${esc(item.vehicle)}</span>
+              <small>${esc(item.region)} · ${String(item.km).replace(".", ",")} km · ${item.minutes} min · ${item.stops} parada(s)</small>
+            </button></li>`).join("") || "<li>Nenhuma rota viária neste momento. Monte a sequência na seção de baixo.</li>"}
+        </ul>
+      </section>
+      <section class="route-section">
+        <h2>Montar sequência</h2>
+        <p class="hint">Sem resposta do serviço em 3 s, a tela avisa que a linha é uma estimativa aproximada.</p>
+        <div class="route-layout">
+          <form id="route-form">
+            <div class="route-block">
+              <h3>Equipe</h3>
+              <label class="field">Quem sai
+                <select name="agent" id="route-agent">
+                  ${agents.map((item) => `<option value="${esc(item.id)}" ${item.id === routeAgentId ? "selected" : ""}>${esc(item.team)} · ${esc(item.name)} · ${esc(item.duty_label)}</option>`).join("")}
+                </select>
+              </label>
+            </div>
+            <div class="route-block">
+              <h3>Destinos</h3>
+              <label class="field">Buscar
+                <input id="route-q" type="search" placeholder="Rua, série ou número da ocorrência" value="${esc(routeQuery)}" />
+              </label>
+              <label class="check"><input id="route-region-only" type="checkbox" ${routeOnlyRegion ? "checked" : ""}/> Só a região desta equipe</label>
+              <div id="route-points" class="route-points">${pointList(choices)}</div>
+              <p class="hint" id="route-count">${routeStops.length} destino(s) marcado(s).</p>
+            </div>
+            <div class="route-block">
+              <h3>Gerar</h3>
+              <div class="actions">
+                <button type="button" class="ghost" data-action="suggest-route">Rota de inspeção sugerida</button>
+                <button type="button" class="primary" data-action="plan-route">Gerar sequência</button>
+              </div>
+            </div>
+            <div id="route-result" class="route-block route-result">${routeResult(agent)}</div>
+          </form>
+          <div class="route-block route-map-col">
+            <h3>Mapa desta sequência</h3>
+            <div id="route-map"></div>
+            <p class="hint">O traço segue a equipe escolhida acima.</p>
+          </div>
+        </div>
+      </section>
     </section>`;
   const select = document.getElementById("route-agent");
   select?.addEventListener("change", () => {
@@ -234,6 +256,21 @@ export function mountRotas(main) {
     const chosen = state.bootstrap.agents.find((item) => item.id === routeAgentId);
     routeStops = (chosen?.plan?.stops || []).map((stop) => ({ kind: stop.kind, id: stop.id }));
     mountRotas(main);
+  });
+  document.getElementById("route-q")?.addEventListener("input", (event) => {
+    rememberStops();
+    routeQuery = event.target.value;
+    document.getElementById("route-points").innerHTML = pointList(routeChoices());
+  });
+  document.getElementById("route-region-only")?.addEventListener("change", (event) => {
+    rememberStops();
+    routeOnlyRegion = event.target.checked;
+    document.getElementById("route-points").innerHTML = pointList(routeChoices());
+  });
+  document.getElementById("route-points")?.addEventListener("change", () => {
+    rememberStops();
+    const node = document.getElementById("route-count");
+    if (node) node.textContent = `${routeStops.length} destino(s) marcado(s).`;
   });
   drawRouteMap(agent);
   routes.paint(document.getElementById("day-board"));
@@ -280,16 +317,46 @@ function routeRecords() {
 }
 
 function routeChoices() {
+  const agent = state.bootstrap.agents.find((item) => item.id === routeAgentId);
+  const region = routeRegion || (routeOnlyRegion ? agent?.region : "");
+  const q = routeQuery.trim().toLowerCase();
+  const match = (label) => !q || label.toLowerCase().includes(q);
   const incidents = state.bootstrap.incidents
     .filter((item) => item.status !== "encerrada" && item.status !== "ciencia")
-    .filter((item) => !routeRegion || item.region === routeRegion)
-    .map((item) => ({ kind: "incident", id: item.id, label: `Ocorrência ${item.number} · ${item.street}` }));
+    .filter((item) => !region || item.region === region)
+    .map((item) => ({ kind: "incident", id: item.id, label: `Ocorrência ${item.number} · ${item.street || item.region}` }))
+    .filter((item) => match(item.label));
   const equipment = state.bootstrap.equipment
     .filter((item) => ["radar", "camera", "balanca", "cancela", "totem"].includes(item.type))
     .filter((item) => item.status !== "operacional" || item.maintenance_flag)
-    .filter((item) => !routeRegion || item.region === routeRegion)
-    .map((item) => ({ kind: "equipment", id: item.id, label: `${item.serial} · ${item.street}` }));
+    .filter((item) => !region || item.region === region)
+    .map((item) => ({ kind: "equipment", id: item.id, label: `${item.serial} · ${item.street}` }))
+    .filter((item) => match(item.label));
   return [...incidents, ...equipment];
+}
+
+function rememberStops() {
+  const visible = new Set([...document.querySelectorAll("#route-points [data-stop-id]")].map((item) => item.dataset.stopId));
+  const checked = [...document.querySelectorAll("#route-points [data-stop-id]:checked")].map((item) => ({ kind: item.dataset.stopKind, id: item.dataset.stopId }));
+  routeStops = routeStops.filter((stop) => !visible.has(stop.id)).concat(checked);
+}
+
+function pointList(choices) {
+  const known = new Map(choices.map((item) => [item.id, item]));
+  const agent = state.bootstrap.agents.find((item) => item.id === routeAgentId);
+  for (const stop of agent?.plan?.stops || []) {
+    if (!known.has(stop.id)) known.set(stop.id, { kind: stop.kind, id: stop.id, label: stop.label });
+  }
+  const selectedIds = new Set(routeStops.map((stop) => stop.id));
+  const row = (item) => `
+      <label class="check"><input type="checkbox" data-stop-kind="${esc(item.kind)}" data-stop-id="${esc(item.id)}" ${selectedIds.has(item.id) ? "checked" : ""}/> ${esc(item.label)}</label>`;
+  const group = (rows, title) => rows.length ? `<h3>${title}</h3>${rows.map(row).join("")}` : "";
+  const selected = routeStops.map((stop) => known.get(stop.id)).filter(Boolean);
+  const rest = choices.filter((item) => !selectedIds.has(item.id));
+  return group(selected, "Nesta sequência")
+    + group(rest.filter((item) => item.kind === "incident"), "Ocorrências")
+    + group(rest.filter((item) => item.kind === "equipment"), "Equipamentos")
+    || "<p class='hint'>Nenhum destino com esse filtro.</p>";
 }
 
 function routeResult(agent) {
@@ -303,9 +370,9 @@ function routeResult(agent) {
       ${plan.stops.map((stop, index) => `
         <li class="stop">
           <span>${stop.order}. ${esc(stop.label)} <small>(${String(stop.leg_km).replace(".", ",")} km)</small></span>
-          <span>
-            <button type="button" class="ghost" data-action="route-move" data-dir="-1" data-index="${index}">Subir</button>
-            <button type="button" class="ghost" data-action="route-move" data-dir="1" data-index="${index}">Descer</button>
+          <span class="stop-moves">
+            <button type="button" class="ghost" data-action="route-move" data-dir="-1" data-index="${index}">Mover acima</button>
+            <button type="button" class="ghost" data-action="route-move" data-dir="1" data-index="${index}">Mover abaixo</button>
           </span>
         </li>`).join("")}
     </ol>
@@ -339,10 +406,8 @@ export function suggestRoute() {
 }
 
 export function checkedStops() {
-  return [...document.querySelectorAll("[data-stop-id]:checked")].map((input) => ({
-    kind: input.dataset.stopKind,
-    id: input.dataset.stopId,
-  }));
+  rememberStops();
+  return routeStops.map((stop) => ({ kind: stop.kind, id: stop.id }));
 }
 
 export function currentRouteAgent() {

@@ -129,7 +129,7 @@ function renderTable() {
       <thead><tr><th>Veículo</th><th>Tipo</th><th>Placa</th><th>Consumo</th><th>R$/km</th><th>Situação</th><th>Base</th></tr></thead>
       <tbody>
         ${rows.map((item) => `
-          <tr data-id="${esc(item.id)}">
+          <tr data-id="${esc(item.id)}" class="${draft?.id === item.id ? "is-selected" : ""}">
             <td>${esc(item.name)}<br><span class="hint">${esc(item.brand)} ${esc(item.model)}</span></td>
             <td>${esc(label(TYPES, item.type))}</td>
             <td>${esc(item.plate || "—")}</td>
@@ -184,8 +184,10 @@ function edit(id) {
   if (!source) return;
   draft = { ...source };
   state.selected = { kind: "vehicle", id };
+  renderTable();
   renderForm();
   syncContext();
+  document.getElementById("fleet-form")?.scrollIntoView({ block: "nearest" });
 }
 
 function renderForm() {

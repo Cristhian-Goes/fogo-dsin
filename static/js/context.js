@@ -23,7 +23,7 @@ export function destroy() {
 }
 
 export function visible() {
-  return Boolean(state.selected && !["cco", "campo", "linha"].includes(state.view));
+  return Boolean(state.selected && !["cco", "campo", "linha", "frota"].includes(state.view));
 }
 
 export function sync() {

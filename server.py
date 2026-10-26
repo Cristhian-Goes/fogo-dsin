@@ -24,7 +24,23 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+
+def _load_env() -> None:
+    path = Path(__file__).resolve().parent / ".env"
+    if not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_env()
+
 import access
+import cloudflare_access
 import assistant
 import model
 import ops_dayroutes
@@ -191,10 +207,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 return
 
+    def _local_host(self) -> bool:
+        host = (self.headers.get("Host") or "").split(":")[0].strip("[]")
+        return host in ("127.0.0.1", "localhost", "::1")
+
     def _api(self, method: str, parts: list[str], query: dict) -> None:
         if parts == ["health"] and method == "GET":
             self.send_json({"ok": True, "name": "F.O.G.O."})
             return
+        open_to_cloudflare = parts == ["config"] or parts == ["session", "cloudflare"]
+        if cloudflare_access.required() and not self._local_host() and not open_to_cloudflare:
+            cloudflare_access.identity(self.headers.get("Cf-Access-Jwt-Assertion"))
         if parts == ["stream"] and method == "GET":
             self._stream()
             return
@@ -219,6 +242,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parts == ["session"] and method == "POST":
             body = self.read_json()
+            cloudflare_access.verify_turnstile(str(body.get("turnstile") or ""), self.client_address[0])
             with LOCK:
                 payload = access.login(str(body.get("email") or ""), str(body.get("password") or ""))
             self.send_json(payload)
@@ -227,10 +251,34 @@ class Handler(BaseHTTPRequestHandler):
             access.logout(self.headers.get("X-Session"))
             self.send_json({"ok": True})
             return
+        if parts == ["session", "cloudflare"] and method == "POST":
+            identity = cloudflare_access.identity(self.headers.get("Cf-Access-Jwt-Assertion"))
+            with LOCK:
+                payload = access.login_identity(identity["email"], "Cloudflare Access")
+            self.send_json(payload)
+            return
         if parts == ["users"] and method == "GET":
             with LOCK:
-                rows = access.list_users(access.require(self.headers.get("X-Session")))
-            self.send_json({"users": rows, "roles": [{"id": key, "label": value["label"]} for key, value in access.ROLES.items()]})
+                actor = access.require(self.headers.get("X-Session"))
+                rows = access.list_users(actor)
+                groups = access.list_groups(actor)
+            self.send_json({
+                "users": rows,
+                "groups": groups,
+                "roles": [{"id": key, "label": value["label"]} for key, value in access.ROLES.items()],
+            })
+            return
+        if parts == ["groups"] and method == "POST":
+            body = self.read_json()
+            with LOCK:
+                created = access.create_group(access.require(self.headers.get("X-Session")), body)
+            self.send_json({"ok": True, "group": created})
+            return
+        if len(parts) == 2 and parts[0] == "groups" and method == "PATCH":
+            body = self.read_json()
+            with LOCK:
+                updated = access.update_group(access.require(self.headers.get("X-Session")), parts[1], body)
+            self.send_json({"ok": True, "group": updated})
             return
         if parts == ["users"] and method == "POST":
             body = self.read_json()
@@ -266,7 +314,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parts == ["equipment"] and method == "POST":
             body = self.read_json()
-            actor = self._actor("write")
+            actor = self._screen("inventario", "write")
             access.ensure_scope(actor, body.get("region"))
             created = mutate(lambda data, now: {"item": model.create_equipment(data, body, now)})
             access.audit(actor, "cadastrou equipamento", created["item"]["id"])
@@ -274,7 +322,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if len(parts) == 2 and parts[0] == "equipment" and method in ("PUT", "PATCH", "DELETE"):
             eid = parts[1]
-            actor = self._actor("write")
+            actor = self._screen("inventario", "write")
             current = next((item for item in STORE["equipment"] if item["id"] == eid), None)
             access.ensure_scope(actor, current.get("region") if current else None)
             if method == "DELETE":
@@ -293,7 +341,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parts == ["agents"] and method == "POST":
             body = self.read_json()
-            actor = self._actor("write")
+            actor = self._screen("agentes", "write")
             access.ensure_scope(actor, body.get("region"))
             created = mutate(lambda data, now: {"item": model.create_agent(data, body, now)})
             access.audit(actor, "cadastrou agente", created["item"]["id"])
@@ -301,7 +349,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if len(parts) == 2 and parts[0] == "agents" and method in ("PUT", "DELETE"):
             aid = parts[1]
-            actor = self._actor("write")
+            actor = self._screen("agentes", "write")
             current = next((item for item in STORE["agents"] if item["id"] == aid), None)
             access.ensure_scope(actor, current.get("region") if current else None)
             if method == "DELETE":
@@ -333,7 +381,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parts == ["vehicles"] and method == "POST":
             body = self.read_json()
-            actor = self._actor("write")
+            actor = self._screen("frota", "write")
             access.ensure_scope(actor, body.get("base_region"))
             created = mutate(lambda data, now: {"item": ops_vehicles.create(data, body, now, actor.get("name") or actor.get("email") or "Operador"), "message": "Cadastro realizado com sucesso."})
             access.audit(actor, "cadastrou veículo", created["item"]["id"])
@@ -342,7 +390,7 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 2 and parts[0] == "vehicles" and method == "PUT":
             vid = parts[1]
             body = self.read_json()
-            actor = self._actor("write")
+            actor = self._screen("frota", "write")
             current = next((item for item in STORE.get("vehicles") or [] if item["id"] == vid), None)
             access.ensure_scope(actor, (current or {}).get("base_region"))
             access.ensure_scope(actor, body.get("base_region") or (current or {}).get("base_region"))
@@ -392,7 +440,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parts == ["routes"] and method == "POST":
             body = self.read_json()
-            actor = self._actor("dispatch")
+            actor = self._screen("rotas", "dispatch")
             agent = next((item for item in STORE["agents"] if item["id"] == body.get("agent_id")), None)
             access.ensure_scope(actor, agent.get("region") if agent else None)
             result = mutate(lambda data, now: model.plan_route(data, body, now))
@@ -401,7 +449,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if len(parts) == 2 and parts[0] == "routes" and method == "DELETE":
             aid = parts[1]
-            actor = self._actor("dispatch")
+            actor = self._screen("rotas", "dispatch")
             result = mutate(lambda data, now: model.clear_plan(data, aid, now))
             access.audit(actor, "removeu rota", aid)
             self.send_json({"ok": True, **result})
@@ -414,7 +462,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if len(parts) == 2 and parts[0] == "scenarios" and method == "POST":
             name = parts[1]
-            actor = self._actor("write")
+            actor = self._screen("inteligencia", "write")
             result = mutate(lambda data, now: model.apply_scenario(data, name, now))
             access.audit(actor, "exercício", name)
             self.send_json({"ok": True, **result})
@@ -437,36 +485,36 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parts == ["day-routes", "optimize"] and method == "POST":
             body = self.read_json()
-            self._actor("dispatch")
+            self._screen("rotas", "dispatch")
             result = mutate(lambda data, now: ops_dayroutes.optimize(data, now, body.get("crew_id") or None))
             self.send_json({"ok": True, **result})
             return
         if parts == ["day-routes", "reorder"] and method == "POST":
             body = self.read_json()
-            self._actor("dispatch")
+            self._screen("rotas", "dispatch")
             result = mutate(lambda data, now: ops_dayroutes.reorder(data, str(body.get("crew_id") or ""), list(body.get("order_ids") or []), now))
             self.send_json({"ok": True, **result})
             return
         if parts == ["day-routes", "undo"] and method == "POST":
-            self._actor("dispatch")
+            self._screen("rotas", "dispatch")
             result = mutate(lambda data, now: ops_dayroutes.undo(data, now))
             self.send_json({"ok": True, **result})
             return
         if parts == ["day-routes", "release"] and method == "POST":
             body = self.read_json()
-            self._actor("dispatch")
+            self._screen("rotas", "dispatch")
             result = mutate(lambda data, now: ops_dayroutes.release_crew(data, str(body.get("crew_id") or ""), now))
             self.send_json({"ok": True, **result})
             return
         if len(parts) == 3 and parts[0] == "day-routes" and parts[2] == "pdf" and method == "GET":
-            self._actor("dispatch")
+            self._screen("rotas", "dispatch")
             with LOCK:
                 blob = ops_dayroutes.pdf(STORE, parts[1])
             self.send_bytes(blob, "application/pdf", f"{parts[1]}.pdf")
             return
         if parts == ["decisions"] and method == "POST":
             body = self.read_json()
-            actor = self._actor("write")
+            actor = self._screen("inteligencia", "write")
             result = mutate(lambda data, now: ops_intel.decide(data, str(body.get("id") or ""), str(body.get("action") or ""), str(body.get("reason") or ""), now, actor.get("name") or "Operador"))
             self.send_json({"ok": True, **result})
             return
@@ -517,19 +565,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parts == ["demo-step"] and method == "POST":
             body = self.read_json()
-            self._actor("write")
+            self._screen("inteligencia", "write")
             result = mutate(lambda data, now: ops_intel.demo_step(data, int(body.get("step") or 0), now))
             self.send_json({"ok": True, **result})
             return
         if parts == ["orders"] and method == "GET":
-            self._actor("write")
+            self._screen("ordens")
             with LOCK:
                 rows = ops_orders.present_all(STORE, model.now_local())
             self.send_json({"orders": rows})
             return
         if parts == ["orders"] and method == "POST":
             body = self.read_json()
-            actor = self._actor("write")
+            actor = self._screen("ordens", "write")
             eq = next((item for item in STORE["equipment"] if item["id"] == body.get("equipment_id")), None)
             access.ensure_scope(actor, eq.get("region") if eq else None)
             created = mutate(lambda data, now: ops_orders.create(data, body, now, actor.get("name") or "Operador"))
@@ -537,21 +585,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, **created})
             return
         if len(parts) == 3 and parts[0] == "orders" and parts[2] == "pdf" and method == "GET":
-            self._actor("write")
+            self._screen("ordens")
             with LOCK:
                 blob = ops_orders.pdf(STORE, parts[1], model.now_local())
             self.send_bytes(blob, "application/pdf", f"{parts[1]}.pdf")
             return
         if len(parts) == 3 and parts[0] == "orders" and parts[2] == "assign" and method == "POST":
             body = self.read_json()
-            actor = self._actor("write")
+            actor = self._screen("ordens", "write")
             result = mutate(lambda data, now: ops_orders.assign(data, parts[1], body.get("agent_id"), now, actor.get("name") or "Operador"))
             access.audit(actor, "atribuiu OS", parts[1])
             self.send_json({"ok": True, **result})
             return
         if len(parts) == 3 and parts[0] == "orders" and parts[2] == "status" and method == "POST":
             body = self.read_json()
-            actor = self._actor("write")
+            actor = self._screen("ordens", "write")
             result = mutate(lambda data, now: ops_orders.advance(data, parts[1], str(body.get("status") or ""), str(body.get("note") or ""), now, actor.get("name") or "Operador"))
             access.audit(actor, "atualizou OS", parts[1])
             self.send_json({"ok": True, **result})
@@ -604,6 +652,8 @@ class Handler(BaseHTTPRequestHandler):
                 "supabaseUrl": os.environ.get("SUPABASE_URL", ""),
                 "supabaseAnonKey": os.environ.get("SUPABASE_ANON_KEY", ""),
                 "environment": os.environ.get("FOGO_ENV", "development"),
+                "cloudflare": cloudflare_access.public_status(),
+                "turnstileSiteKey": "" if self._local_host() else cloudflare_access.turnstile_sitekey(),
             })
             return
         self.send_json({"error": "Caminho não encontrado."}, 404)
@@ -708,6 +758,11 @@ class Handler(BaseHTTPRequestHandler):
     def _actor(self, kind: str) -> dict:
         user = access.require(self.headers.get("X-Session"))
         access.guard(user, kind)
+        return user
+
+    def _screen(self, view: str, kind: str | None = None) -> dict:
+        user = self._actor(kind) if kind else access.require(self.headers.get("X-Session"))
+        access.require_view(user, view)
         return user
 
 

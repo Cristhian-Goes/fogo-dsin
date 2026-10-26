@@ -34,6 +34,19 @@ const MORE = [
   ["campo", "Modo campo"],
 ];
 
+function allowed(view) {
+  const open = state.user?.views;
+  if (!Array.isArray(open) || !open.length) return true;
+  return open.includes(view);
+}
+
+function homeView() {
+  const open = state.user?.views || ["cco"];
+  if (state.user?.role === "agente" && open.includes("campo")) return "campo";
+  if (open.includes("cco")) return "cco";
+  return open[0] || "cco";
+}
+
 const views = {
   cco: { mount: cco.mount, destroy: cco.destroy },
   linha: { mount: desk.mountLinha, destroy: () => {} },
@@ -84,7 +97,7 @@ export async function boot() {
   }
   renderShell();
   state._go = show;
-  show("cco");
+  show(homeView());
   ux.maybeTour(show);
   connect();
   document.addEventListener("keydown", (event) => {
@@ -122,15 +135,16 @@ function renderShell() {
           <p class="live" id="live"><i></i> conectando</p>
           <button type="button" class="ghost" data-action="toggle-chat">Chat</button>
           <button type="button" class="ghost" data-action="toggle-theme" title="Alternar tema claro e escuro">Tema</button>
-          <p id="who" class="who">${esc(state.user ? state.user.name : "Sem sessão")}</p>
+          <p id="who" class="who">${esc(state.user ? `${state.user.name} · ${state.user.role_label}` : "Sem sessão")}</p>
+          <button type="button" class="ghost" data-action="logout">Sair</button>
         </div>
       </header>
       <nav aria-label="Seções">
         <div class="nav-links">
           <button type="button" data-action="toggle-nav" title="Recolher menu">${ux.glyph("linha")}<span class="nav-text">Recolher</span></button>
-          ${PRIMARY.map(([id, label]) => navButton(id, label)).join("")}
-          <button type="button" data-action="toggle-more" title="Mais telas">${ux.glyph("linha")}<span class="nav-text">Mais</span></button>
-          <div id="nav-more" hidden>${MORE.map(([id, label]) => navButton(id, label)).join("")}</div>
+          ${PRIMARY.filter(([id]) => allowed(id)).map(([id, label]) => navButton(id, label)).join("")}
+          ${MORE.some(([id]) => allowed(id)) ? `<button type="button" data-action="toggle-more" title="Mais telas" aria-expanded="true">${ux.glyph("linha")}<span class="nav-text">Mais</span></button>
+          <div id="nav-more">${MORE.filter(([id]) => allowed(id)).map(([id, label]) => navButton(id, label)).join("")}</div>` : ""}
         </div>
         <p class="credit">Desenvolvido por Cristhian</p>
       </nav>
@@ -139,7 +153,7 @@ function renderShell() {
     </div>
     <section id="chat" class="chat" hidden>
       <header><h2>PROMETHEUS Chat</h2><button type="button" class="ghost" data-action="toggle-chat">Fechar</button></header>
-      <div id="chat-log" class="chat-log"></div>
+      <div id="chat-log" class="chat-log"><p class="hint" id="chat-empty">Pergunte o que está crítico, quem está livre ou peça um resumo do turno.</p></div>
       <form id="chat-form">
         <label class="sr" for="chat-q">Pergunta operacional</label>
         <input id="chat-q" placeholder="O que está crítico agora?" />
@@ -187,7 +201,7 @@ function renderShell() {
     if (event.key === "g") state.chord = "g";
     else if (state.chord === "g" && event.key === "m") {
       state.chord = "";
-      show("cco");
+      show(homeView());
     } else state.chord = "";
   });
   document.getElementById("find").addEventListener("submit", (event) => {
@@ -197,6 +211,10 @@ function renderShell() {
 }
 
 function show(view) {
+  if (!allowed(view)) {
+    toast("Seu perfil não acessa esta tela.");
+    view = homeView();
+  }
   if (!views[view]) return;
   if (view === "campo" && state.user?.role === "agente" && state.user.registration) {
     const mine = state.bootstrap.agents.find((item) => item.registration === state.user.registration);
@@ -381,7 +399,7 @@ async function onClick(event) {
     try {
       const place = await api.geo(query);
       state.place = place;
-      if (state.view !== "cco") show("cco");
+      if (state.view !== "cco") show(homeView());
       cco.showPlace(place);
       toast(place.note);
     } catch (error) {
@@ -412,13 +430,19 @@ async function onClick(event) {
   }
   if (action === "show-on-map") {
     state.selected = { kind: button.dataset.kind, id: button.dataset.id };
-    show("cco");
+    show(homeView());
     cco.focusSelection();
   }
   if (action === "toggle-chat") {
     const panel = document.getElementById("chat");
     panel.hidden = !panel.hidden;
     if (!panel.hidden) document.getElementById("chat-q").focus();
+  }
+  if (action === "logout") {
+    sessionStorage.removeItem("fogo-session");
+    try { await api.logout(); } catch (error) { /* a sessão local já foi esquecida */ }
+    location.reload();
+    return;
   }
   if (action === "toggle-theme") {
     const next = document.documentElement.dataset.theme === "dark" ? "" : "dark";
@@ -460,6 +484,9 @@ async function onClick(event) {
     }
   }
   if (action === "os-pdf") {
+    button.disabled = true;
+    const previous = button.textContent;
+    button.textContent = "Gerando…";
     try {
       const response = await fetch(`/api/orders/${button.dataset.id}/pdf`, { headers: { "X-Session": sessionStorage.getItem("fogo-session") || "" } });
       if (!response.ok) throw new Error("Não foi possível gerar o PDF.");
@@ -468,11 +495,16 @@ async function onClick(event) {
       const link = document.createElement("a");
       link.href = url;
       link.download = `${button.dataset.id}.pdf`;
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      toast(`PDF ${button.dataset.id} baixado.`);
     } catch (error) {
       toast(error.message, "bad");
     }
+    button.disabled = false;
+    button.textContent = previous;
   }
   if (action === "mark-event") {
     button.disabled = true;
@@ -505,7 +537,9 @@ async function onClick(event) {
   }
   if (action === "toggle-more") {
     const more = document.getElementById("nav-more");
-    if (more) more.hidden = !more.hidden;
+    if (!more) return;
+    more.hidden = !more.hidden;
+    button.setAttribute("aria-expanded", more.hidden ? "false" : "true");
   }
   if (action === "crisis-toggle") {
     if (state.crisis) {
@@ -521,14 +555,14 @@ async function onClick(event) {
     }
     state.crisis = incident.id;
     state.selected = { kind: "incident", id: incident.id };
-    if (state.view !== "cco") show("cco");
+    if (state.view !== "cco") show(homeView());
     else cco.refresh();
     paintHeader();
   }
   if (action === "crisis") {
     state.crisis = button.dataset.id;
     state.selected = { kind: "incident", id: button.dataset.id };
-    if (state.view !== "cco") show("cco");
+    if (state.view !== "cco") show(homeView());
     else cco.refresh();
   }
   if (action === "crisis-exit") {
@@ -667,7 +701,7 @@ async function onClick(event) {
     try {
       const payload = await api.replay(button.dataset.at);
       state.replay = payload.frame;
-      show("cco");
+      show(homeView());
       cco.refresh();
     } catch (error) {
       toast(error.message, "bad");
@@ -801,17 +835,96 @@ async function askChat(message, confirm) {
 function pushChat(who, text, targets, confirmMessage = "") {
   const log = document.getElementById("chat-log");
   if (!log) return;
+  document.getElementById("chat-empty")?.remove();
   const links = (targets || []).filter((item) => item.id).map((item) => `<button type="button" class="ghost" data-action="open-record" data-kind="${esc(item.kind)}" data-id="${esc(item.id)}">Ver ${esc(item.label || "registro")}</button>`).join("");
   const confirm = confirmMessage ? `<button type="button" class="primary" data-action="chat-confirm" data-message="${esc(confirmMessage)}">Confirmar</button>` : "";
-  log.insertAdjacentHTML("beforeend", `<article><p><b>${esc(who)}.</b> ${esc(text)}</p><div class="actions">${links}${confirm}</div></article>`);
+  const mine = who === "Você" ? "is-user" : "";
+  log.insertAdjacentHTML("beforeend", `<article class="${mine}"><p><b>${esc(who)}</b><br>${esc(text)}</p>${links || confirm ? `<div class="actions">${links}${confirm}</div>` : ""}</article>`);
   log.scrollTop = log.scrollHeight;
 }
 
 async function ensureSession() {
-  if (!sessionStorage.getItem("fogo-session")) {
-    const session = await api.login("operador@fogo.local", "demonstracao");
+  if (sessionStorage.getItem("fogo-session")) return;
+  const config = await fetch("/api/config").then((response) => response.json()).catch(() => ({}));
+  await new Promise((resolve) => paintLogin(config, resolve));
+}
+
+function paintLogin(config, resolve) {
+  const local = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+  const siteKey = local ? "" : (config.turnstileSiteKey || "");
+  const cloudflare = config.cloudflare?.enabled;
+  document.getElementById("app").innerHTML = `
+    <section class="gate">
+      <form class="gate-card" id="login-form">
+        <h1>F.O.G.O.</h1>
+        <p class="hint">Entre com o usuário da central. O administrador cria as outras contas em Acessos, com perfil e grupo.</p>
+        <label class="field">Usuário<input name="email" autocomplete="username" required /></label>
+        <label class="field">Senha<input name="password" type="password" autocomplete="current-password" required /></label>
+        ${siteKey ? `<div id="turnstile-box"></div>` : ""}
+        <button type="submit" class="primary">Entrar</button>
+        ${cloudflare ? `<button type="button" class="ghost" id="login-cloudflare">Entrar com a Cloudflare Access</button>` : ""}
+        <h2>Contas de demonstração</h2>
+        <div class="filters">
+          ${[
+            ["operador@fogo.local", "Operador da CCO"],
+            ["admin@fogo.local", "Administrador de demonstração"],
+            ["agente@fogo.local", "Agente de campo"],
+          ].map(([email, label]) => `<button type="button" class="ghost" data-demo="${esc(email)}">${esc(label)}</button>`).join("")}
+        </div>
+        <p class="hint">A senha dessas três contas é demonstracao.</p>
+      </form>
+    </section>`;
+  if (siteKey) mountTurnstile(siteKey);
+  const form = document.getElementById("login-form");
+  const enter = (email, password) => {
+    const token = siteKey ? (window.turnstile?.getResponse() || "") : "";
+    if (siteKey && !token && !local) {
+      toast("Confirme a verificação da Cloudflare antes de entrar.", "bad");
+      return;
+    }
+    acceptLogin(() => api.login(email, password, token), resolve);
+  };
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    enter(String(data.get("email") || ""), String(data.get("password") || ""));
+  });
+  document.getElementById("login-cloudflare")?.addEventListener("click", () => {
+    acceptLogin(() => api.cloudflareLogin(), resolve);
+  });
+  form.querySelectorAll("[data-demo]").forEach((button) => {
+    button.addEventListener("click", () => enter(button.dataset.demo, "demonstracao"));
+  });
+}
+
+function mountTurnstile(siteKey) {
+  const node = document.getElementById("turnstile-box");
+  if (!node) return;
+  const render = () => window.turnstile.render(node, {
+    sitekey: siteKey,
+    "error-callback": () => {
+      node.replaceChildren();
+    },
+  });
+  if (window.turnstile) {
+    render();
+    return;
+  }
+  const script = document.createElement("script");
+  script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+  script.async = true;
+  script.onload = render;
+  document.head.appendChild(script);
+}
+
+async function acceptLogin(run, resolve) {
+  try {
+    const session = await run();
     sessionStorage.setItem("fogo-session", session.token);
     state.user = session.user;
+    resolve();
+  } catch (error) {
+    toast(error.message, "bad");
   }
 }
 
