@@ -18,6 +18,12 @@ const TITLES = {
   linha: "Linha do tempo",
   historico: "Histórico",
   campo: "Modo campo",
+  financeiro: "Financeiro",
+  conformidade: "Conformidade",
+  dimensionamento: "Equipes",
+  conhecimento: "Conhecimento",
+  integridade: "Integridade",
+  valor: "Valor entregue",
 };
 
 const GLYPH = {
@@ -37,6 +43,12 @@ const GLYPH = {
   linha: "M5 7h14M5 12h14M5 17h8",
   historico: "M12 7v6l4 2M12 4a8 8 0 100 16 8 8 0 000-16z",
   campo: "M8 4h8v16H8z",
+  financeiro: "M5 19V9M12 19V5M19 19v-7",
+  conformidade: "M12 3l7 3v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V6z",
+  dimensionamento: "M5 20V10M12 20V6M19 20v-8",
+  conhecimento: "M6 5h9a3 3 0 013 3v12H9a3 3 0 00-3 3z",
+  integridade: "M8 12l3 3 5-6",
+  valor: "M4 16l5-5 3 3 8-8",
 };
 
 export function title(view) {

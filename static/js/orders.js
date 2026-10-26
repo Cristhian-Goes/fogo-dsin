@@ -30,6 +30,7 @@ export function mount(main) {
           <option value="preventiva">Preventiva</option>
           <option value="instalacao">Instalação</option>
           <option value="recolhimento">Recolhimento</option>
+        <option value="afericao">Aferição</option>
         </select>
         <select name="priority">
           <option value="critica">Crítica · 4 h</option>
@@ -96,10 +97,13 @@ function card(item) {
       <p>${esc(item.serial || "")} · <span class="pill tone-${item.priority === "critica" ? "bad" : item.priority === "alta" ? "warn" : "info"}"><i></i>${esc(item.priority)}</span> · ${esc(item.kind)}</p>
       <p>${esc(item.description || "")}</p>
       <p class="hint">${esc(item.agent_name || "Sem responsável")} · ${clock} · ${esc(clockLabel(item.due_at))}</p>
+      ${item.conclusao === "suspeita" ? `<p class="hint">Conclusão suspeita: ${esc((item.motivos || []).join("; "))}</p>` : ""}
+      ${(item.dicas || []).length ? `<p class="hint" title="Dicas de OS parecidas, pelo tipo e pelas palavras.">Dicas: ${item.dicas.map((tip) => esc(tip.tip)).join(" · ")}</p>` : ""}
+      ${item.janela && item.janela.conflicts ? `<p class="hint" title="${esc(item.janela.method || "")}">${item.janela.ok ? "Janela livre." : `Conflito de agenda. Sugestão: ${esc(item.janela.suggestion)}.`}</p>` : ""}
       <div class="actions">
         ${state.user?.can_write && item.status === "aberta" ? `<button type="button" class="primary" data-action="os-assign" data-id="${esc(item.id)}">Atribuir o mais próximo</button>` : ""}
         ${state.user?.can_write && item.status === "atribuida" ? `<button type="button" class="primary" data-action="os-status" data-id="${esc(item.id)}" data-status="em_execucao">Iniciar</button>` : ""}
-        ${state.user?.can_write && item.status === "em_execucao" ? `<button type="button" class="primary" data-action="os-status" data-id="${esc(item.id)}" data-status="concluida">Concluir</button>` : ""}
+        ${state.user?.can_write && item.status === "em_execucao" ? `<label class="field slim">Check-in lat<input name="checkin_lat" value="${esc(item.lat ?? "")}" /></label><label class="field slim">lng<input name="checkin_lng" value="${esc(item.lng ?? "")}" /></label><label class="field slim">Foto antes<input name="foto_antes" placeholder="nome do arquivo" /></label><label class="field slim">Foto depois<input name="foto_depois" placeholder="nome do arquivo" /></label><label class="field slim">Dica do técnico<input name="dica" maxlength="180" placeholder="Uma frase" /></label><button type="button" class="primary" data-action="os-close" data-id="${esc(item.id)}">Concluir</button>` : ""}
         ${state.user?.can_write && item.status !== "concluida" && item.status !== "cancelada" ? `<button type="button" class="ghost" data-action="os-status" data-id="${esc(item.id)}" data-status="cancelada">Cancelar</button>` : ""}
         <button type="button" class="ghost" data-action="os-pdf" data-id="${esc(item.id)}">Baixar PDF</button>
       </div>

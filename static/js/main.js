@@ -4,6 +4,7 @@ import * as cco from "./cco.js";
 import * as context from "./context.js";
 import * as desk from "./desk.js";
 import * as forecast from "./forecast.js";
+import * as gestao from "./gestao.js";
 import { clockLabel, esc, toast } from "./format.js";
 import * as fleet from "./fleet.js";
 import * as inventory from "./inventory.js";
@@ -32,6 +33,12 @@ const MORE = [
   ["linha", "Linha do tempo"],
   ["historico", "Histórico"],
   ["campo", "Modo campo"],
+  ["financeiro", "Financeiro"],
+  ["conformidade", "Conformidade"],
+  ["dimensionamento", "Equipes"],
+  ["conhecimento", "Conhecimento"],
+  ["integridade", "Integridade"],
+  ["valor", "Valor entregue"],
 ];
 
 function allowed(view) {
@@ -64,6 +71,12 @@ const views = {
   historico: { mount: desk.mountHistorico, destroy: desk.destroy },
   campo: { mount: desk.mountCampo, destroy: desk.destroy },
   acessos: { mount: admin.mount, destroy: admin.destroy },
+  financeiro: { mount: (main) => gestao.mount(main, "financeiro"), destroy: () => {} },
+  conformidade: { mount: (main) => gestao.mount(main, "conformidade"), destroy: () => {} },
+  dimensionamento: { mount: (main) => gestao.mount(main, "dimensionamento"), destroy: () => {} },
+  conhecimento: { mount: (main) => gestao.mount(main, "conhecimento"), destroy: () => {} },
+  integridade: { mount: (main) => gestao.mount(main, "integridade"), destroy: () => {} },
+  valor: { mount: (main) => gestao.mount(main, "valor"), destroy: () => {} },
 };
 
 function navButton(id, label) {
@@ -466,6 +479,24 @@ async function onClick(event) {
     button.disabled = true;
     try {
       const result = await api.assignOrder(button.dataset.id);
+      toast(result.message);
+    } catch (error) {
+      toast(error.message, "bad");
+      button.disabled = false;
+    }
+  }
+  if (action === "os-close") {
+    const card = button.closest(".os-card");
+    button.disabled = true;
+    try {
+      const read = (name) => card?.querySelector(`[name="${name}"]`)?.value || "";
+      const result = await api.orderStatus(button.dataset.id, "concluida", read("note"), {
+        checkin_lat: read("checkin_lat"),
+        checkin_lng: read("checkin_lng"),
+        foto_antes: read("foto_antes"),
+        foto_depois: read("foto_depois"),
+        dica: read("dica"),
+      });
       toast(result.message);
     } catch (error) {
       toast(error.message, "bad");

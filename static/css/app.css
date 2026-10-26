@@ -86,6 +86,10 @@ button { cursor: pointer; }
 .stop-num span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 11px; color: #fff; font-size: 12px; }
 .stop-num span.late { outline: 2px solid var(--bad); }
 .field.slim { min-width: 120px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 12px 0; }
+.stat-grid article { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.stat-grid b { display: block; font-size: 20px; margin-top: 4px; }
+.chart { width: 100%; height: 180px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 @media (max-width: 900px) { .day-layout, .kanban { grid-template-columns: 1fr; } }
 html[data-theme="dark"] {
   --bg: #12171c;

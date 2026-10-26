@@ -135,7 +135,7 @@ function equipmentTable(query) {
           <tr data-open="${esc(item.id)}" class="${state.editor?.id === item.id ? "is-selected" : ""}">
             <td>${pill(item.status)}</td>
             <td>${esc(typeLabel(item.type))}</td>
-            <td><b>${esc(item.serial)}</b><br><span class="muted">${esc(item.brand)} ${esc(item.model)}</span>${item.suspicion ? `<br><span class="is-late">${esc(item.suspicion)}: ${esc(item.suspicion_reason)}</span>` : ""}</td>
+            <td><b>${esc(item.serial)}</b>${item.fora_de_conformidade ? ` <span class="pill tone-bad" title="Validade de aferição vencida. Confirme a regra com o órgão competente."><i></i>fora de conformidade</span>` : ""}<br><span class="muted">${esc(item.brand)} ${esc(item.model)}</span>${item.suspicion ? `<br><span class="is-late">${esc(item.suspicion)}: ${esc(item.suspicion_reason)}</span>` : ""}</td>
             <td>${esc(item.neighborhood)} · ${esc(item.city)}<br><span class="muted">${esc(item.street)}</span></td>
             <td>${esc(item.maintenance_flag || item.maintenance_need)}</td>
             <td><button type="button" class="ghost" data-action="select" data-kind="equipment" data-id="${esc(item.id)}">Ver</button></td>

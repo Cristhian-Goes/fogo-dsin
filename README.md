@@ -96,6 +96,23 @@ As cores de situação são as mesmas em badge, mapa e tabela: verde operacional
 
 Na Central, cinco indicadores ficam no topo e o que fazer agora fica na coluna direita. O quadro de OS aceita arrastar o card de estágio. O formulário de equipamento está em Identificação, Situação e Localização.
 
+## Valor para a gestão
+
+Os números desta camada são estimativas com premissas em `value_settings` no cadastro. Apagar `data/store.json` recria os campos que faltarem, sem mudar o esquema.
+
+| Dor | Solução | Método | Dados | Limitação |
+| --- | --- | --- | --- | --- |
+| O gestor não vê o custo do mês | Painel Financeiro | Soma de mão de obra, peças e deslocamento; perda = horas parado × custo/hora do tipo e da via | OS encerradas e `horas_parada_mes` | Meses sem OS usam série de demonstração, marcada na tela |
+| Aferição vencida passa batido | Lista 30/15/7 dias e OS automática | Data `validade_afericao` comparada com hoje | Radar e balança, órgão no cadastro | O prazo legal precisa ser confirmado com a legislação e o órgão. A autuação é simulada |
+| OS concluída sem o técnico no local | Check-in, fotos e tempo mínimo | Haversine contra o raio configurável | Check-in, nomes das fotos e início da OS | Foto é o nome do arquivo, não o binário. Sem prova, a OS fecha como conclusão suspeita |
+| Não se sabe quantas equipes bastam | Simulador de 1 a 15 equipes | Eventos discretos: chegada exponencial e atendimento na média das OS | Histórico de abertura; se a amostra for curta, usa 1,2 por hora | Um turno de 8 h. SLA é a espera até o início, não o SLA contratual da OS |
+| A dica se perde no fechamento | Campo de uma frase e busca por modelo | Sobreposição de tipo e palavras | `dica_do_tecnico` | Não é um modelo treinado |
+| Preventiva no horário errado | Aviso de vizinho fora ou pico | Mesma região fora, outra preventiva aberta, ou 7h–9h e 17h–19h | Situação do equipamento e a hora | A sugestão anda de hora em hora, sem o trânsito real |
+| O histórico pode ser alterado | Cadeia SHA-256 e PDF | Cada registro inclui o hash do anterior | `ledger` no cadastro | A cadeia guarda os eventos novos. O log antigo de acesso continua separado |
+| Relatório sob encomenda | `/docs`, webhook HMAC e frases no chat | Palavras-chave locais; o webhook assina o corpo | OS, contratos e a simulação | Sem chave de IA o chat não reescreve o relatório |
+
+A tela Valor entregue soma rota poupada, multa contratual identificada e o risco de aferição. Está escrito na tela que são estimativas.
+
 ## Uso de IA
 
 A interface e a lógica foram construídas com auxílio do Grok 4.7, no Cursor. O índice, o risco de equipamento, a ordem das rotas e a inteligência operacional são estatística e regras explicáveis. O chat usa Anthropic ou OpenAI somente se a chave existir; sem chave, roda local. Não há chave gravada no código.
