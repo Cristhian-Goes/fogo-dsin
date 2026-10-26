@@ -1,0 +1,434 @@
+{
+  "users": [
+    {
+      "id": "US-975a6a",
+      "name": "Administrador geral",
+      "email": "admin@fogo.local",
+      "password": "cdc14da827f31da8$e936cae5ff6937d9ebf7db68503fa192ea729e130f5c972a1c74d3661f9fca19",
+      "registration": "",
+      "agency": "Central de operações",
+      "uf": "SP",
+      "city": "",
+      "role": "administrador",
+      "active": true
+    },
+    {
+      "id": "US-d06c02",
+      "name": "Helena Vasconcelos",
+      "email": "estadual.sp@fogo.local",
+      "password": "14b76984e6244b3a$43900cb03d4fa481c14e5d2928367aba1c323cf0bfbf059058df3ca60ae70bba",
+      "registration": "",
+      "agency": "Central de operações",
+      "uf": "SP",
+      "city": "",
+      "role": "gestor_estadual",
+      "active": true
+    },
+    {
+      "id": "US-44ee3e",
+      "name": "Paulo Henrique Luz",
+      "email": "municipal.marilia@fogo.local",
+      "password": "dc7fc5d11f37b0cb$2cd2595cd2db2e46811c58bfaede0a6fd1fb4b33a654e6366707f8738281c4d5",
+      "registration": "",
+      "agency": "Central de operações",
+      "uf": "SP",
+      "city": "Marília",
+      "role": "gestor_municipal",
+      "active": true
+    },
+    {
+      "id": "US-5acb53",
+      "name": "Sandra Ribeiro",
+      "email": "supervisor@fogo.local",
+      "password": "9c18b8b28ca32957$0d94c0fa6596b10fb6e9421e90ab69b7c7f447928af1d2fcb10bcbb0655349b3",
+      "registration": "",
+      "agency": "Central de operações",
+      "uf": "SP",
+      "city": "Marília",
+      "role": "supervisor",
+      "active": true
+    },
+    {
+      "id": "US-ea3e8e",
+      "name": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "password": "2b9684caf64b62eb$e90b653e53b87557d526a3a87762d14c04a8b93c58a558d23fb4094547124727",
+      "registration": "",
+      "agency": "Central de operações",
+      "uf": "SP",
+      "city": "Marília",
+      "role": "operador",
+      "active": true
+    },
+    {
+      "id": "US-bc445c",
+      "name": "Ana Luiza Ferreira",
+      "email": "agente@fogo.local",
+      "password": "01e9f9f8792b9a7e$061559b08074147e1a5c79fc0266eeebde087e9720b65958636638e8866741f0",
+      "registration": "AT-2401",
+      "agency": "Central de operações",
+      "uf": "SP",
+      "city": "Marília",
+      "role": "agente",
+      "active": true
+    },
+    {
+      "id": "US-69b5e4",
+      "name": "Auditor da operação",
+      "email": "auditor@fogo.local",
+      "password": "0767441e6fff3796$cf08fe5b8ae3ba0ae804efac092f0ee278f8fa9157a52476988aab2aa66a5970",
+      "registration": "",
+      "agency": "Central de operações",
+      "uf": "SP",
+      "city": "Marília",
+      "role": "auditor",
+      "active": true
+    }
+  ],
+  "audit": [
+    {
+      "at": "2026-10-26T13:00:44-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-26T13:00:33-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-26T12:47:43-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-26T12:46:15-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "planejou rota",
+      "detail": "AG-1009"
+    },
+    {
+      "at": "2026-10-26T12:45:20-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-26T12:45:12-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-26T12:43:51-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "registrou jornada",
+      "detail": "AG-1011"
+    },
+    {
+      "at": "2026-10-26T12:43:31-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-26T12:29:34-03:00",
+      "user": "Auditor da operação",
+      "email": "auditor@fogo.local",
+      "role": "auditor",
+      "action": "entrou",
+      "detail": "auditor@fogo.local"
+    },
+    {
+      "at": "2026-10-26T12:29:27-03:00",
+      "user": "Paulo Henrique Luz",
+      "email": "municipal.marilia@fogo.local",
+      "role": "gestor_municipal",
+      "action": "entrou",
+      "detail": "municipal.marilia@fogo.local"
+    },
+    {
+      "at": "2026-10-26T12:25:39-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-26T12:25:24-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-22T20:56:15-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-22T20:55:57-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-22T20:30:17-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "planejou rota",
+      "detail": "AG-1011"
+    },
+    {
+      "at": "2026-10-22T20:29:42-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "exercício",
+      "detail": "furto"
+    },
+    {
+      "at": "2026-10-22T20:29:38-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "exercício",
+      "detail": "falha-radar"
+    },
+    {
+      "at": "2026-10-22T20:28:04-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-22T20:22:48-03:00",
+      "user": "Administrador geral",
+      "email": "admin@fogo.local",
+      "role": "administrador",
+      "action": "restaurou demonstração",
+      "detail": "store"
+    },
+    {
+      "at": "2026-10-22T20:22:48-03:00",
+      "user": "Administrador geral",
+      "email": "admin@fogo.local",
+      "role": "administrador",
+      "action": "entrou",
+      "detail": "admin@fogo.local"
+    },
+    {
+      "at": "2026-10-22T20:22:15-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "despachou veículo",
+      "detail": "OC-3005 · VH-1 · rapida"
+    },
+    {
+      "at": "2026-10-22T20:21:14-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-22T20:21:03-03:00",
+      "user": "Auditor da operação",
+      "email": "auditor@fogo.local",
+      "role": "auditor",
+      "action": "entrou",
+      "detail": "auditor@fogo.local"
+    },
+    {
+      "at": "2026-10-22T20:20:58-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:40:13-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:38:34-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "atualizou veículo",
+      "detail": "VH-6"
+    },
+    {
+      "at": "2026-10-21T22:38:34-03:00",
+      "user": "Paulo Henrique Luz",
+      "email": "municipal.marilia@fogo.local",
+      "role": "gestor_municipal",
+      "action": "entrou",
+      "detail": "municipal.marilia@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:38:34-03:00",
+      "user": "Auditor da operação",
+      "email": "auditor@fogo.local",
+      "role": "auditor",
+      "action": "entrou",
+      "detail": "auditor@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:38:28-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "atualizou veículo",
+      "detail": "VH-6"
+    },
+    {
+      "at": "2026-10-21T22:38:28-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "cadastrou veículo",
+      "detail": "VH-6"
+    },
+    {
+      "at": "2026-10-21T22:38:28-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:33:00-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "planejou rota",
+      "detail": "AG-1019"
+    },
+    {
+      "at": "2026-10-21T22:32:48-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "planejou rota",
+      "detail": "AG-1017"
+    },
+    {
+      "at": "2026-10-21T22:32:41-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "planejou rota",
+      "detail": "AG-1017"
+    },
+    {
+      "at": "2026-10-21T22:28:18-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:27:55-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:27:45-03:00",
+      "user": "Administrador geral",
+      "email": "admin@fogo.local",
+      "role": "administrador",
+      "action": "restaurou demonstração",
+      "detail": "store"
+    },
+    {
+      "at": "2026-10-21T22:27:45-03:00",
+      "user": "Administrador geral",
+      "email": "admin@fogo.local",
+      "role": "administrador",
+      "action": "entrou",
+      "detail": "admin@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:27:37-03:00",
+      "user": "Paulo Henrique Luz",
+      "email": "municipal.marilia@fogo.local",
+      "role": "gestor_municipal",
+      "action": "entrou",
+      "detail": "municipal.marilia@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:27:37-03:00",
+      "user": "Auditor da operação",
+      "email": "auditor@fogo.local",
+      "role": "auditor",
+      "action": "entrou",
+      "detail": "auditor@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:27:37-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:27:17-03:00",
+      "user": "Auditor da operação",
+      "email": "auditor@fogo.local",
+      "role": "auditor",
+      "action": "entrou",
+      "detail": "auditor@fogo.local"
+    },
+    {
+      "at": "2026-10-21T22:27:17-03:00",
+      "user": "Operador da CCO",
+      "email": "operador@fogo.local",
+      "role": "operador",
+      "action": "entrou",
+      "detail": "operador@fogo.local"
+    }
+  ]
+}
