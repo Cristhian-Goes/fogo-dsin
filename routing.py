@@ -49,7 +49,83 @@ def road(points: list[tuple[float, float]], kind: str = "carro") -> dict:
     return chosen
 
 
-def _request(points: list[tuple[float, float]], alternatives: bool) -> list[dict]:
+def route_or_estimate(points: list[tuple[float, float]], timeout: float = 3) -> dict:
+    """Geometria viária, ou estimativa haversine a 30 km/h se o OSRM não responder em 3 s."""
+    if len(points) < 2:
+        raise RoadError("Informe origem e destino.")
+    try:
+        found = _request(points, alternatives=False, timeout=timeout)
+    except RoadError:
+        return _estimate(points)
+    chosen = dict(found[0])
+    chosen["approximate"] = False
+    chosen["road"] = len(chosen.get("polyline") or []) >= 3
+    return chosen
+
+
+def table(points: list[tuple[float, float]], timeout: float = 3) -> dict:
+    """Matriz de minutos e km. Sem resposta, a matriz é haversine a 30 km/h."""
+    if len(points) < 2:
+        raise RoadError("A matriz precisa de ao menos dois pontos.")
+    key = "table|" + ";".join(f"{round(lat, 4)},{round(lng, 4)}" for lat, lng in points)
+    cached = _cache_get(key)
+    if cached:
+        return cached[0]
+    coord = ";".join(f"{lng:.6f},{lat:.6f}" for lat, lng in points)
+    url = f"{BASE}/table/v1/driving/{coord}?annotations=duration,distance"
+    request = urllib.request.Request(url, headers={"User-Agent": "FOGO-CCO/1.0 (demonstracao local)"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        payload = None
+    if not payload or payload.get("code") != "Ok":
+        dist, dur = _haversine_matrix(points)
+        return {"durations_min": dur, "distances_km": dist, "approximate": True, "note": "estimativa aproximada"}
+    durations = []
+    distances = []
+    for row_dur, row_dist in zip(payload.get("durations") or [], payload.get("distances") or []):
+        durations.append([0 if value is None else round(value / 60, 2) for value in row_dur])
+        distances.append([0 if value is None else round(value / 1000, 3) for value in row_dist])
+    packed = {
+        "durations_min": durations,
+        "distances_km": distances,
+        "approximate": False,
+        "note": "Tempos da matriz OSRM, sem trânsito ao vivo.",
+    }
+    _cache_put(key, [packed])
+    return packed
+
+
+def _estimate(points: list[tuple[float, float]]) -> dict:
+    dist, dur = _haversine_matrix(points)
+    legs = []
+    steps_km = 0.0
+    steps_min = 0.0
+    for index in range(len(points) - 1):
+        km = dist[index][index + 1]
+        minutes = dur[index][index + 1]
+        steps_km += km
+        steps_min += minutes
+        legs.append({"distance_km": round(km, 2), "duration_min": max(1, round(minutes))})
+    return {
+        "distance_km": round(steps_km, 2),
+        "duration_min": max(1, round(steps_min)),
+        "polyline": [[round(lat, 6), round(lng, 6)] for lat, lng in points],
+        "legs": legs,
+        "steps": [],
+        "approximate": True,
+        "road": False,
+        "note": "estimativa aproximada",
+    }
+
+
+def _haversine_matrix(points: list[tuple[float, float]]) -> tuple[list[list[float]], list[list[float]]]:
+    import optimizer
+    return optimizer.matrix_from_coords(points)
+
+
+def _request(points: list[tuple[float, float]], alternatives: bool, timeout: float = 12) -> list[dict]:
     if len(points) < 2:
         raise RoadError("Informe origem e destino.")
     key = _key(points, alternatives)
@@ -66,7 +142,7 @@ def _request(points: list[tuple[float, float]], alternatives: bool) -> list[dict
     url = f"{BASE}/route/v1/driving/{coord}?{query}"
     request = urllib.request.Request(url, headers={"User-Agent": "FOGO-CCO/1.0 (demonstracao local)"})
     try:
-        with urllib.request.urlopen(request, timeout=12) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception as exc:
         raise RoadError("O serviço de roteirização não respondeu. Nenhum trajeto em linha reta foi usado no lugar.") from exc
