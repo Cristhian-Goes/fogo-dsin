@@ -1,5 +1,6 @@
 import { api } from "./api.js";
 import { clockLabel, esc, pill } from "./format.js";
+import * as routes from "./routes.js";
 import { state } from "./state.js";
 
 let fieldMap;
@@ -188,6 +189,7 @@ export function mountRotas(main) {
   const agent = state.bootstrap.agents.find((item) => item.id === routeAgentId);
   const choices = routeChoices();
   main.innerHTML = `
+    <div id="day-board"></div>
     <section class="page">
       <h1>Rotas</h1>
       <p class="hint">Em andamento ${live} · Planejadas ${planned} · Encerradas com atraso registrado ${delayed} · Com ocorrência ${withIncident}. Só entram percursos com geometria viária.</p>
@@ -200,7 +202,7 @@ export function mountRotas(main) {
           </button></li>`).join("") || "<li>Nenhuma rota viária neste momento. Gere uma sequência abaixo.</li>"}
       </ul>
       <h2>Nova sequência</h2>
-      <p class="hint">Escolha a equipe e os destinos. A geração pede o percurso pelas vias. Sem resposta do serviço, nada é desenhado.</p>
+      <p class="hint">Escolha a equipe e os destinos. Sem resposta do serviço em 3 s, a tela mostra uma estimativa aproximada e não trata o traço como rua.</p>
       ${routeRegion ? `<p class="hint">Origem sugerida pela região ${esc(routeRegion)}. Os pontos abaixo estão filtrados por ela.</p>` : ""}
       <div class="route-layout">
         <form id="route-form">
@@ -234,6 +236,7 @@ export function mountRotas(main) {
     mountRotas(main);
   });
   drawRouteMap(agent);
+  routes.paint(document.getElementById("day-board"));
 }
 
 function routeRecords() {
@@ -295,7 +298,7 @@ function routeResult(agent) {
   const status = plan.status === "aprovada" ? "Aprovada" : "Planejada";
   return `
     <h2>${status} · ${plan.stops.length} pontos · ${String(plan.distance_km).replace(".", ",")} km · ${plan.duration_min} min</h2>
-    <p class="hint">Origem: ${esc(plan.origin || agent.region)}. ${esc(plan.traffic_note || "Sem leitura de trânsito em tempo real.")}</p>
+    <p class="hint">Origem: ${esc(plan.origin || agent.region)}. ${esc(plan.traffic_note || "Sem leitura de trânsito em tempo real.")} ${plan.approximate ? "estimativa aproximada" : ""} ${plan.comparison ? `Ingênua ${plan.comparison.naive_min} min, otimizada economiza ${plan.comparison.saved_min} min na mesma conta.` : ""}</p>
     <ol>
       ${plan.stops.map((stop, index) => `
         <li class="stop">
@@ -317,8 +320,8 @@ function drawRouteMap(agent) {
   routeMap = L.map(node, { zoomControl: false }).setView([-22.48, -50.15], 9);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(routeMap);
   if (agent) L.circleMarker([agent.lat, agent.lng], { radius: 6, color: "#1f4e79" }).addTo(routeMap).bindTooltip(agent.name);
-  if (agent?.plan?.road && agent.plan.polyline?.length >= 3) {
-    const line = L.polyline(agent.plan.polyline, { color: "#1f4e79", dashArray: "6 6" }).addTo(routeMap);
+  if (agent?.plan?.polyline?.length >= 2 && (agent.plan.road || agent.plan.approximate)) {
+    const line = L.polyline(agent.plan.polyline, { color: agent.plan.approximate ? "#8a5a00" : "#1f4e79", dashArray: agent.plan.approximate ? "2 8" : "6 6" }).addTo(routeMap);
     routeMap.fitBounds(line.getBounds(), { padding: [20, 20] });
   }
   setTimeout(() => routeMap.invalidateSize(), 60);
@@ -438,10 +441,26 @@ export function mountCampo(main) {
       <button type="button" class="ghost" data-action="field-clear">Trocar agente</button>
       <h1>${esc(agent.name)}</h1>
       <p class="meta">${esc(agent.team)} · ${esc(agent.registration)}</p>
+      ${fieldRoute(agent)}
       <p>${pill(agent.duty)}</p>
       ${incident ? missionHtml(agent, incident) : `<p>Nenhuma missão atribuída. A central ainda não despachou esta equipe.</p><button type="button" class="primary big" data-action="select" data-kind="agent" data-id="${esc(agent.id)}">Ver minha posição</button>`}
     </section>`;
   if (incident) drawField(agent, incident);
+}
+
+function fieldRoute(agent) {
+  const crew = (state.bootstrap.day_plan?.crews || []).find((item) => item.agent_id === agent.id && item.active !== false);
+  const stop = (crew?.stops || []).find((item) => item.kind === "order") || crew?.stops?.[0];
+  const emergency = `<button type="button" class="ghost big" data-action="safety-now" data-id="${esc(agent.id)}" data-mode="silent">Emergência</button>`;
+  if (!stop) return emergency;
+  const maps = crew.maps_url ? `<a class="ghost big" href="${esc(crew.maps_url)}" target="_blank" rel="noopener">Navegar</a>` : "";
+  return `
+    <h2>Próxima parada</h2>
+    <p><b>${esc(stop.label)}</b></p>
+    <p>ETA ${esc(stop.eta_label || "-")}${stop.late ? " · SLA em risco" : ""}</p>
+    ${stop.kind === "order" ? `<button type="button" class="primary big" data-action="day-arrive" data-id="${esc(stop.id)}">Cheguei</button><button type="button" class="ghost big" data-action="day-done" data-id="${esc(stop.id)}">Concluir</button>` : ""}
+    ${maps}
+    ${emergency}`;
 }
 
 function missionHtml(agent, incident) {

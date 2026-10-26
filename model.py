@@ -3172,18 +3172,19 @@ def plan_route(data: dict, payload: dict, moment: datetime) -> dict[str, Any]:
             })
         else:
             raise Invalid("Ponto desconhecido.")
-    ordered = points if payload.get("keep_order") else _nearest_neighbor(agent, points)
-    driven = __import__("ops_vehicles").drive_plan(agent, ordered)
+    ordered, driven, comparison = __import__("ops_dayroutes").sequence_plan(agent, points, bool(payload.get("keep_order")))
     plan = {
         "stops": ordered,
         "distance_km": driven["distance_km"],
         "duration_min": driven["duration_min"],
         "polyline": driven["polyline"],
-        "road": True,
+        "road": bool(driven.get("road")),
+        "approximate": bool(driven.get("approximate")),
         "created_at": iso(moment),
         "status": "aprovada" if payload.get("status") == "aprovada" else "planejada",
         "origin": agent.get("region"),
         "traffic_note": driven.get("note") or "Tempo estimado pelas vias do mapa. Não inclui trânsito ao vivo.",
+        "comparison": comparison,
     }
     agent["plan"] = plan
     agent["updated_at"] = iso(moment)

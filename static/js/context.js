@@ -176,6 +176,8 @@ function equipmentCard(item) {
       fact("Região", esc(item.region)),
       fact("Órgão", esc(item.agency || "")),
       fact("Manutenção", esc(item.next_maintenance || item.maintenance_need || "sem data")),
+      fact("Confiança do dado", `${item.confidence ?? "—"}`),
+      item.suspicion ? fact("Atenção", esc(`${item.suspicion}. ${item.suspicion_reason || ""}`)) : "",
     ].join(""),
     [link("region", item.region, "Ver região"), mapButton("equipment", item.id)].join(""),
     "",

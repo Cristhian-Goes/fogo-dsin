@@ -7,7 +7,9 @@ import * as forecast from "./forecast.js";
 import { clockLabel, esc, toast } from "./format.js";
 import * as fleet from "./fleet.js";
 import * as inventory from "./inventory.js";
+import * as intel from "./intel.js";
 import * as orders from "./orders.js";
+import * as routes from "./routes.js";
 import { go, state } from "./state.js";
 
 const views = {
@@ -19,6 +21,7 @@ const views = {
   ordens: { mount: orders.mount, destroy: orders.destroy },
   frota: { mount: fleet.mount, destroy: fleet.destroy },
   rotas: { mount: desk.mountRotas, destroy: desk.destroy },
+  inteligencia: { mount: intel.mount, destroy: () => {} },
   regioes: { mount: desk.mountRegioes, destroy: desk.destroy },
   alertas: { mount: desk.mountAlertas, destroy: desk.destroy },
   previsao: { mount: forecast.mount, destroy: forecast.destroy },
@@ -30,7 +33,7 @@ const views = {
 const NAV = [
   ["Operação", [["cco", "Mapa sinóptico"], ["ocorrencias", "Ocorrências"], ["rotas", "Rotas"], ["linha", "Linha do tempo"]]],
   ["Recursos", [["agentes", "Agentes"], ["frota", "Veículos"], ["inventario", "Equipamentos"], ["ordens", "Ordens"]]],
-  ["Território", [["regioes", "Regiões"], ["alertas", "Alertas"], ["previsao", "Previsão"]]],
+  ["Território", [["regioes", "Regiões"], ["alertas", "Alertas"], ["previsao", "Previsão"], ["inteligencia", "Inteligência"]]],
   ["Registro", [["historico", "Histórico"], ["campo", "Modo campo"], ["acessos", "Acessos"]]],
 ];
 
@@ -85,6 +88,7 @@ function renderShell() {
           <span>Saúde operacional</span>
           <b>${health.value}%</b>
           <span class="band-${esc(health.band)}">${esc(health.label)}</span>
+          <span>${state.bootstrap.kpis.zombies || 0} zumbis</span>
         </button>
         <form class="find" id="find" role="search">
           <label class="sr" for="find-q">Buscar ocorrência, agente, veículo ou equipamento</label>
@@ -192,6 +196,10 @@ async function reload(focus) {
     fleet.afterReload();
   } else if (state.view === "previsao") {
     forecast.reload();
+  } else if (state.view === "rotas") {
+    routes.afterReload();
+  } else if (state.view === "inteligencia") {
+    intel.afterReload();
   } else {
     views[state.view]?.mount(document.getElementById("main"));
   }
@@ -204,7 +212,7 @@ function paintHeader() {
   const clock = document.getElementById("clock");
   if (!node) return;
   node.title = health.basis;
-  node.innerHTML = `<span>Saúde operacional</span><b>${health.value}%</b><span class="band-${esc(health.band)}">${esc(health.label)}</span>`;
+  node.innerHTML = `<span>Saúde operacional</span><b>${health.value}%</b><span class="band-${esc(health.band)}">${esc(health.label)}</span><span>${state.bootstrap.kpis.zombies || 0} zumbis</span>`;
   if (clock) clock.textContent = clockLabel(state.bootstrap.clock);
   const who = document.getElementById("who");
   if (who && state.user) who.textContent = `${state.user.name} · ${state.user.role_label}`;
@@ -272,6 +280,8 @@ async function onClick(event) {
   const button = event.target.closest("[data-action]");
   if (!button) return;
   const action = button.dataset.action;
+  if (await routes.handle(action, button)) return;
+  if (await intel.handle(action, button)) return;
   if (action === "find-open") {
     document.getElementById("find-list").hidden = true;
     document.getElementById("find-q").value = "";
@@ -553,6 +563,16 @@ async function onClick(event) {
       toast(result.message);
     } catch (error) {
       toast(error.message, "bad");
+    }
+  }
+  if (action === "day-arrive" || action === "day-done") {
+    button.disabled = true;
+    try {
+      const result = await api.orderStatus(button.dataset.id, action === "day-arrive" ? "em_execucao" : "concluida");
+      toast(result.message);
+    } catch (error) {
+      toast(error.message, "bad");
+      button.disabled = false;
     }
   }
   if (action === "clear-plan") {

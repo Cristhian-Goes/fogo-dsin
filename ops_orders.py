@@ -140,6 +140,13 @@ def _open(data: dict, eq: dict, kind: str, priority: str, description: str, mome
     data["orders"].insert(0, order)
     data["orders"] = data["orders"][:200]
     model.push_feed(data, "atencao", f"{order['number']} aberta para {eq.get('serial')}.", eq.get("region") or "", moment)
+    if priority == "critica" and data.get("day_plan"):
+        try:
+            note = __import__("ops_dayroutes").insert_order(data, order, moment)
+            if note:
+                order.setdefault("events", []).insert(0, {"at": model.iso(moment), "text": note})
+        except model.Invalid:
+            pass
     return order
 
 

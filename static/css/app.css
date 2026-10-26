@@ -57,6 +57,16 @@ button { cursor: pointer; }
 .chat-log { overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .chat form { display: flex; gap: 8px; padding: 8px; border-top: 1px solid var(--line); }
 .chat form input { flex: 1; }
+.day-layout { display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: 12px; align-items: start; }
+#day-map, #route-map { height: 420px; border: 1px solid var(--line); border-radius: var(--radius); }
+.stop-list { list-style: none; padding: 0; margin: 8px 0; }
+.stop-list li { padding: 6px 0; border-bottom: 1px solid var(--line); cursor: grab; }
+.stop-list .is-late, .is-late { color: var(--bad); }
+.stop-num { background: transparent; border: 0; }
+.stop-num span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 11px; color: #fff; font-size: 12px; }
+.stop-num span.late { outline: 2px solid var(--bad); }
+.field.slim { min-width: 120px; }
+@media (max-width: 900px) { .day-layout, .kanban { grid-template-columns: 1fr; } }
 html[data-theme="dark"] {
   --bg: #12171c;
   --panel: #1c242d;

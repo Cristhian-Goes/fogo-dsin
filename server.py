@@ -27,6 +27,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 import access
 import assistant
 import model
+import ops_dayroutes
+import ops_intel
 import ops_orders
 import ops_vehicles
 
@@ -89,6 +91,8 @@ def load_store() -> None:
                 STORE = loaded
                 now = model.now_local()
                 grew = model.ensure_inventory_size(STORE, now)
+                grew = ops_intel.ensure(STORE, now) or grew
+                grew = ops_dayroutes.ensure_scenario(STORE, now) or grew
                 before = len(STORE.get("orders") or [])
                 ops_orders.reconcile(STORE, now)
                 ops_vehicles.ensure(STORE, now)
@@ -105,6 +109,8 @@ def load_store() -> None:
                 print("Cadastro ilegível. A demonstração foi recriada.")
     STORE = model.build_demo(model.now_local())
     ops_vehicles.ensure(STORE, model.now_local())
+    ops_intel.ensure(STORE, model.now_local())
+    ops_dayroutes.ensure_scenario(STORE, model.now_local())
     ops_orders.reconcile(STORE, model.now_local())
     save_store()
 
@@ -200,6 +206,11 @@ class Handler(BaseHTTPRequestHandler):
                 if (payload.get("user") or {}).get("role") == "agente":
                     for vehicle in payload.get("vehicles") or []:
                         vehicle["plate"] = ""
+                now = model.now_local()
+                payload["day_plan"] = ops_dayroutes.present(STORE)
+                ops_intel.annotate(payload["equipment"], STORE, now)
+                payload["intel"] = ops_intel.snapshot(STORE, now)
+                payload["kpis"]["zombies"] = payload["intel"]["zombies"]
             self.send_json(payload)
             return
         if parts == ["session"] and method == "GET":
@@ -413,12 +424,101 @@ class Handler(BaseHTTPRequestHandler):
             def _reset(data, now):
                 fresh = model.build_demo(now)
                 ops_vehicles.ensure(fresh, now)
+                ops_intel.ensure(fresh, now)
+                ops_dayroutes.ensure_scenario(fresh, now)
+                ops_orders.reconcile(fresh, now)
                 data.clear()
                 data.update(fresh)
                 return {"message": "Demonstração restaurada.", "focus": {"kind": "clear"}}
 
             result = mutate(_reset)
             access.audit(actor, "restaurou demonstração", "store")
+            self.send_json({"ok": True, **result})
+            return
+        if parts == ["day-routes", "optimize"] and method == "POST":
+            body = self.read_json()
+            self._actor("dispatch")
+            result = mutate(lambda data, now: ops_dayroutes.optimize(data, now, body.get("crew_id") or None))
+            self.send_json({"ok": True, **result})
+            return
+        if parts == ["day-routes", "reorder"] and method == "POST":
+            body = self.read_json()
+            self._actor("dispatch")
+            result = mutate(lambda data, now: ops_dayroutes.reorder(data, str(body.get("crew_id") or ""), list(body.get("order_ids") or []), now))
+            self.send_json({"ok": True, **result})
+            return
+        if parts == ["day-routes", "undo"] and method == "POST":
+            self._actor("dispatch")
+            result = mutate(lambda data, now: ops_dayroutes.undo(data, now))
+            self.send_json({"ok": True, **result})
+            return
+        if parts == ["day-routes", "release"] and method == "POST":
+            body = self.read_json()
+            self._actor("dispatch")
+            result = mutate(lambda data, now: ops_dayroutes.release_crew(data, str(body.get("crew_id") or ""), now))
+            self.send_json({"ok": True, **result})
+            return
+        if len(parts) == 3 and parts[0] == "day-routes" and parts[2] == "pdf" and method == "GET":
+            self._actor("dispatch")
+            with LOCK:
+                blob = ops_dayroutes.pdf(STORE, parts[1])
+            self.send_bytes(blob, "application/pdf", f"{parts[1]}.pdf")
+            return
+        if parts == ["decisions"] and method == "POST":
+            body = self.read_json()
+            actor = self._actor("write")
+            result = mutate(lambda data, now: ops_intel.decide(data, str(body.get("id") or ""), str(body.get("action") or ""), str(body.get("reason") or ""), now, actor.get("name") or "Operador"))
+            self.send_json({"ok": True, **result})
+            return
+        if parts == ["remote-restart"] and method == "POST":
+            body = self.read_json()
+            self._actor("write")
+            result = mutate(lambda data, now: ops_intel.remote_restart(data, str(body.get("equipment_id") or ""), now))
+            self.send_json({"ok": True, **result})
+            return
+        if parts == ["ride"] and method == "POST":
+            body = self.read_json()
+            self._actor("dispatch")
+            result = mutate(lambda data, now: ops_intel.accept_ride(data, str(body.get("crew_id") or ""), str(body.get("equipment_id") or ""), now))
+            self.send_json({"ok": True, **result})
+            return
+        if parts == ["safety"] and method == "POST":
+            body = self.read_json()
+            actor = self._actor("write")
+            mode = str(body.get("mode") or "ask")
+            agent_id = str(body.get("agent_id") or "")
+
+            def _safety(data, now):
+                if mode == "ok":
+                    return ops_intel.safety_ok(data, agent_id, now)
+                if mode == "silent":
+                    return ops_intel.safety_silent(data, agent_id, now)
+                return ops_intel.safety_ask(data, agent_id, now)
+
+            result = mutate(_safety)
+            self.send_json({"ok": True, **result})
+            return
+        if len(parts) == 3 and parts[0] == "mothers" and parts[2] == "resolve" and method == "POST":
+            actor = self._actor("write")
+            result = mutate(lambda data, now: ops_intel.resolve_mother(data, parts[1], now, actor.get("name") or "Operador"))
+            self.send_json({"ok": True, **result})
+            return
+        if len(parts) == 2 and parts[0] == "diagnosis" and method == "GET":
+            self._actor("write")
+            with LOCK:
+                found = ops_intel.diagnosis_for(STORE, parts[1])
+            self.send_json(found)
+            return
+        if parts == ["handoff"] and method == "GET":
+            access.require(self.headers.get("X-Session"))
+            with LOCK:
+                pack = ops_intel.handoff(STORE, model.now_local())
+            self.send_json(pack)
+            return
+        if parts == ["demo-step"] and method == "POST":
+            body = self.read_json()
+            self._actor("write")
+            result = mutate(lambda data, now: ops_intel.demo_step(data, int(body.get("step") or 0), now))
             self.send_json({"ok": True, **result})
             return
         if parts == ["orders"] and method == "GET":
@@ -619,8 +719,11 @@ def simulate() -> None:
             return
         try:
             with LOCK:
-                model.simulate_tick(STORE, rng, model.now_local())
-                payload = model.tick_payload(STORE, model.now_local())
+                now = model.now_local()
+                model.simulate_tick(STORE, rng, now)
+                ops_intel.safety_tick(STORE, now)
+                payload = model.tick_payload(STORE, now)
+                payload["kpis"]["zombies"] = ops_intel.snapshot(STORE, now)["zombies"]
                 if time.time() - last_save > 60:
                     save_store()
                     last_save = time.time()
