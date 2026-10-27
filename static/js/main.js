@@ -888,8 +888,7 @@ async function ensureSession() {
 }
 
 function paintLogin(config, resolve) {
-  window.__turnstileDown = false;
-  const siteKey = config.turnstileSiteKey || "";
+  const siteKey = config.turnstileSiteKey || "0x4AAAAAAFm7oNadai9dSVeV";
   const cloudflare = config.cloudflare?.enabled;
   document.getElementById("app").innerHTML = `
     <section class="gate">
@@ -904,7 +903,8 @@ function paintLogin(config, resolve) {
         <p class="lede">Entre com o usuário da central. O administrador cria as outras contas em Acessos.</p>
         <label class="field">Usuário<input name="email" autocomplete="username" required placeholder="nome@orgao" /></label>
         <label class="field">Senha<input name="password" type="password" autocomplete="current-password" required /></label>
-        ${siteKey ? `<div id="turnstile-box"></div><p class="hint" id="turnstile-note" hidden></p>` : ""}
+        <div id="turnstile-box"></div>
+        <p class="hint" id="turnstile-note" hidden></p>
         <button type="submit" class="primary">Entrar</button>
         ${cloudflare ? `<button type="button" class="ghost" id="login-cloudflare">Entrar com a Cloudflare Access</button>` : ""}
         <div class="gate-demo">
@@ -919,12 +919,18 @@ function paintLogin(config, resolve) {
         </div>
       </form>
     </section>`;
-  if (siteKey) mountTurnstile(siteKey);
+  mountTurnstile(siteKey);
   const form = document.getElementById("login-form");
   const enter = (email, password) => {
-    const ready = siteKey && !window.__turnstileDown;
-    const token = ready ? (window.turnstile?.getResponse() || "") : "";
-    if (ready && !token) {
+    const box = document.getElementById("turnstile-box");
+    let token = "";
+    try {
+      token = (box?.dataset.widget && window.turnstile?.getResponse(box.dataset.widget)) || "";
+    } catch {
+      token = "";
+    }
+    if (!token) token = box?.querySelector('input[name="cf-turnstile-response"]')?.value || "";
+    if (window.turnstile && !token) {
       toast("Confirme a verificação da Cloudflare antes de entrar.", "bad");
       return;
     }
@@ -947,19 +953,21 @@ function mountTurnstile(siteKey) {
   const node = document.getElementById("turnstile-box");
   if (!node) return;
   const localHost = location.hostname === "127.0.0.1" || location.hostname === "localhost" || location.hostname === "::1";
-  const render = () => {
-    const widgetId = window.turnstile.render(node, {
-      sitekey: siteKey,
-      theme: document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+  const render = (key, allowLocalFallback) => {
+    node.replaceChildren();
+    node.classList.toggle("is-local", key === "1x00000000000000000000AA");
+    node.dataset.widget = window.turnstile.render(node, {
+      sitekey: key,
+      theme: "light",
+      language: "pt-BR",
+      appearance: "always",
+      size: "normal",
       retry: "auto",
       "error-callback": (code) => {
-        const hostnameBlocked = String(code) === "110200";
-        if (!hostnameBlocked) {
-          window.turnstile.reset(widgetId);
+        if (String(code) === "110200" && allowLocalFallback && localHost) {
+          render("1x00000000000000000000AA", false);
           return;
         }
-        window.__turnstileDown = true;
-        node.replaceChildren();
         const note = document.getElementById("turnstile-note");
         if (!note || localHost) return;
         note.hidden = false;
@@ -967,14 +975,15 @@ function mountTurnstile(siteKey) {
       },
     });
   };
+  const start = () => render(siteKey, true);
   if (window.turnstile) {
-    render();
+    start();
     return;
   }
   const script = document.createElement("script");
   script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
   script.async = true;
-  script.onload = render;
+  script.onload = start;
   document.head.appendChild(script);
 }
 
@@ -985,7 +994,12 @@ async function acceptLogin(run, resolve) {
     state.user = session.user;
     resolve();
   } catch (error) {
-    window.turnstile?.reset();
+    const box = document.getElementById("turnstile-box");
+    try {
+      if (box?.dataset.widget) window.turnstile?.reset(box.dataset.widget);
+    } catch {
+      /* o widget já foi recolhido */
+    }
     toast(error.message, "bad");
   }
 }

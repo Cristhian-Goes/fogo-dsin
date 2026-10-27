@@ -313,7 +313,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parts == ["session"] and method == "POST":
             body = self.read_json()
-            cloudflare_access.verify_turnstile(str(body.get("turnstile") or ""), self.client_address[0])
+            cloudflare_access.verify_turnstile(
+                str(body.get("turnstile") or ""),
+                self.client_address[0],
+                local=self._local_host(),
+            )
             with LOCK:
                 payload = access.login(str(body.get("email") or ""), str(body.get("password") or ""))
             self.send_json(payload)

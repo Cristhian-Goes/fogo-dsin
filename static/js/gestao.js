@@ -1,4 +1,5 @@
 import { api } from "./api.js";
+import { bindChart, chartPanel } from "./chart.js";
 import { esc, toast } from "./format.js";
 
 async function downloadIntegrity() {
@@ -22,19 +23,33 @@ function money(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function cards(items) {
-  return `<div class="stat-grid">${items.map(([label, value, title]) => `<article title="${esc(title || "")}"><span>${esc(label)}</span><b>${esc(String(value))}</b></article>`).join("")}</div>`;
+function asList(value) {
+  return Array.isArray(value) ? value : [];
 }
 
-function chart(series) {
-  const values = series.map((item) => Number(item.total) || 0);
-  const max = Math.max(...values, 1);
-  const step = values.length > 1 ? 280 / (values.length - 1) : 280;
-  const points = values.map((value, index) => `${20 + index * step},${140 - (value / max) * 110}`).join(" ");
-  return `<svg class="chart" viewBox="0 0 320 160" role="img" aria-label="Gasto mensal">
-    <polyline fill="none" stroke="#1b6b45" stroke-width="2" points="${points}" />
-    ${series.map((item, index) => `<text x="${20 + index * step}" y="156" font-size="10" fill="#5c6b7a">${esc(item.month.slice(5))}</text>`).join("")}
-  </svg>`;
+function cards(items) {
+  return `<div class="stat-grid">${asList(items).map(([label, value, title]) => `<article title="${esc(title || "")}"><span>${esc(label)}</span><b>${esc(String(value))}</b></article>`).join("")}</div>`;
+}
+
+function axisLabel(kind, value) {
+  const number = Number(value) || 0;
+  if (kind === "gasto" || kind === "valor") {
+    const abs = Math.abs(number);
+    if (abs >= 1000) {
+      const mil = abs / 1000;
+      const text = mil >= 10 ? String(Math.round(mil)) : String(Math.round(mil * 10) / 10).replace(".", ",");
+      return `${text} mil`;
+    }
+    return String(Math.round(abs));
+  }
+  if (Number.isInteger(number)) return String(number);
+  return String(number).replace(".", ",");
+}
+
+function pick(length, index) {
+  if (!length) return 0;
+  if (index < 0 || index >= length) return length - 1;
+  return index;
 }
 
 export async function mount(main, view) {
@@ -48,8 +63,11 @@ export async function mount(main, view) {
       return;
     }
     const pack = await api.gestao();
-    const painter = { financeiro: finance, conformidade: compliance, dimensionamento: staffing, conhecimento: knowledge, valor: value }[view] || finance;
-    main.innerHTML = painter(pack);
+    if (view === "conhecimento") {
+      main.innerHTML = knowledge(pack);
+    } else {
+      openBoard(main, pack, { financeiro: "gasto", dimensionamento: "equipe", conformidade: "afericao", valor: "valor" }[view] || "gasto");
+    }
     const search = document.getElementById("knowledge-q");
     search?.addEventListener("input", () => {
       const text = search.value.toLowerCase();
@@ -62,61 +80,189 @@ export async function mount(main, view) {
   }
 }
 
-function finance(pack) {
-  const item = pack.finance;
-  return `<section class="page">
-    <h1>Financeiro</h1>
-    <p class="hint" title="${esc(item.formula)}">${esc(item.method)}</p>
-    ${cards([
-      ["Manutenção no mês", money(item.month_total), item.formula],
+const SERIES = [
+  ["gasto", "Gasto"],
+  ["equipe", "Equipes"],
+  ["afericao", "Aferição"],
+  ["valor", "Valor entregue"],
+];
+
+function openBoard(main, pack, seriesId) {
+  const chosen = { id: seriesId, index: -1 };
+  const draw = (focus) => {
+    const model = boardModel(pack, chosen.id);
+    chosen.index = pick(model.points.length, chosen.index);
+    const point = model.points[chosen.index];
+    main.innerHTML = `<section class="page dash">
+      <header class="page-head">
+        <h1>${esc(model.title)}</h1>
+        <p>${esc(model.lede)}</p>
+      </header>
+      <div class="dash-switch" role="tablist" aria-label="Séries do painel">
+        ${SERIES.map(([id, label]) => `<button type="button" class="ghost" role="tab" data-series="${id}" aria-selected="${id === chosen.id ? "true" : "false"}">${label}</button>`).join("")}
+      </div>
+      ${cards(model.stats)}
+      ${chartPanel(model.points, chosen.index, (value) => axisLabel(chosen.id, value), model.title)}
+      <h2>${esc(model.detailTitle)}</h2>
+      ${model.detail(point)}
+      <p class="hint">${esc(model.footnote)}</p>
+    </section>`;
+    main.querySelectorAll("[data-series]").forEach((button) => {
+      button.addEventListener("click", () => {
+        chosen.id = button.dataset.series;
+        chosen.index = -1;
+        draw(false);
+      });
+    });
+    bindChart(main.querySelector(".chart-panel"), (index) => {
+      chosen.index = index;
+      draw(true);
+    });
+    main.querySelectorAll("[data-row]").forEach((row) => {
+      row.addEventListener("click", () => {
+        chosen.index = Number(row.dataset.row);
+        draw(true);
+      });
+    });
+    if (focus) main.querySelector(".chart-point.is-on circle")?.focus();
+  };
+  draw(false);
+}
+
+function boardModel(pack, id) {
+  const finance = pack.finance || {};
+  const staff = pack.staffing || {};
+  const compliance = pack.compliance || {};
+  const delivered = pack.value || {};
+  if (id === "equipe") return teamModel(staff);
+  if (id === "afericao") return calibrationModel(compliance);
+  if (id === "valor") return valueModel(delivered, pack);
+  return spendModel(finance, pack);
+}
+
+function spendModel(item, pack) {
+  const series = asList(item.series);
+  const synthetic = series.some((row) => row.synthetic);
+  return {
+    title: "Gasto mensal",
+    lede: item.method || "Tendência do gasto de manutenção.",
+    stats: [
+      ["Manutenção no mês", money(item.month_total), item.formula || ""],
       ["Custo médio por OS", money(item.average_order), "Soma dos custos das OS encerradas no mês, dividida pela quantidade."],
-      ["Perda por indisponibilidade", money(item.downtime_loss), item.formula],
+      ["Perda por indisponibilidade", money(item.downtime_loss), item.formula || ""],
       ["Projeção do ano", money(item.projection_year), "Tendência linear dos meses exibidos, somada por 12 meses."],
       ["Orçamento anual", money(item.budget_year), "Orçamento mensal informado vezes 12."],
-    ])}
-    <h2>Gasto mensal</h2>
-    ${item.series?.length ? chart(item.series) : "<p class='hint'>Sem série de gasto.</p>"}
-    <p class="hint">${item.series?.some((row) => row.synthetic) ? "Meses marcados como demonstração completam a série quando ainda há poucas OS encerradas." : "Série tirada das OS encerradas."} Diferença para o orçamento anual: ${money(item.budget_gap)}.</p>
-    <h2>Equipamentos mais caros</h2>
-    <ul class="rows">${(item.top_equipment || []).map((row) => `<li><b>${esc(row.serial)}</b> ${money(row.total)}</li>`).join("") || "<li>Nenhuma OS com custo.</li>"}</ul>
-    <h2>Custo por fornecedor</h2>
-    <ul class="rows">${(item.suppliers || []).map((row) => `<li><b>${esc(row.supplier)}</b> ${money(row.total)}</li>`).join("") || "<li>Sem fornecedor com custo.</li>"}</ul>
-    <h2>Fila do supervisor</h2>
-    <ul class="rows">${(pack.suspects || []).map((row) => `<li><b>${esc(row.number)}</b> ${esc((row.motivos || []).join("; "))}</li>`).join("") || "<li>Nenhuma conclusão suspeita.</li>"}</ul>
-  </section>`;
+    ],
+    points: series.map((row) => {
+      const month = String(row.month || "");
+      return {
+        label: month.slice(5) || month || "mês",
+        value: Number(row.total) || 0,
+        display: money(row.total),
+        detail: row.synthetic ? "Mês de demonstração, para completar a série." : "OS encerradas neste mês.",
+      };
+    }),
+    detailTitle: "Onde o custo está",
+    detail: () => `<h3>Equipamentos mais caros</h3>
+      <ul class="rows">${asList(item.top_equipment).map((row) => `<li><b>${esc(row.serial)}</b> ${money(row.total)}</li>`).join("") || "<li>Nenhuma OS com custo.</li>"}</ul>
+      <h3>Custo por fornecedor</h3>
+      <ul class="rows">${asList(item.suppliers).map((row) => `<li><b>${esc(row.supplier)}</b> ${money(row.total)}</li>`).join("") || "<li>Sem fornecedor com custo.</li>"}</ul>
+      <h3>Fila do supervisor</h3>
+      <ul class="rows">${asList(pack.suspects).map((row) => `<li><b>${esc(row.number)}</b> ${esc(asList(row.motivos).join("; "))}</li>`).join("") || "<li>Nenhuma conclusão suspeita.</li>"}</ul>`,
+    footnote: `${synthetic ? "Meses de demonstração completam a série quando ainda há poucas OS encerradas." : "Série tirada das OS encerradas."} Diferença para o orçamento anual: ${money(item.budget_gap)}.`,
+  };
 }
 
-function compliance(pack) {
-  const item = pack.compliance;
-  const label = { vencida: "vencida", "7": "em 7 dias", "15": "em 15 dias", "30": "em 30 dias" };
-  return `<section class="page">
-    <h1>Conformidade de aferição</h1>
-    <p>${esc(item.note)}</p>
-    ${cards([
-      ["Fora de conformidade", item.expired, item.method],
-      ["Autuações simuladas", item.citations, "Quantidade vencida vezes a taxa parametrizável. Não é um auto real."],
-    ])}
-    <ul class="rows">${(item.rows || []).map((row) => `<li><b>${esc(row.serial)}</b> ${esc(label[row.bucket] || row.bucket)} · ${esc(row.orgao || "órgão não informado")} · validade ${esc(row.validade_afericao || "")}${row.fora_de_conformidade ? " · fora de conformidade" : ""}</li>`).join("") || "<li>Nenhum radar ou balança na janela.</li>"}</ul>
-  </section>`;
+function teamModel(item) {
+  const rows = asList(item.rows);
+  return {
+    title: "Equipes e espera",
+    lede: item.sentence || item.method || "Simulação da espera conforme o número de equipes.",
+    stats: [
+      ["Chegadas por hora", String(item.rate_per_hour ?? 0).replace(".", ","), "Volume usado na simulação do turno."],
+      ["Atendimento médio", `${String(item.service_min ?? 0).replace(".", ",")} min`, "Duração média das OS."],
+      ["Espera aceita", `${String(item.wait_limit_min ?? 0).replace(".", ",")} min`, "Limite do SLA de espera."],
+    ],
+    points: rows.map((row) => ({
+      label: String(row.teams),
+      value: Number(row.sla_pct) || 0,
+      display: `${String(row.sla_pct).replace(".", ",")}%`,
+      detail: `${row.teams} equipes · espera ${String(row.wait_min).replace(".", ",")} min · utilização ${String(row.utilization_pct).replace(".", ",")}%`,
+      row,
+    })),
+    detailTitle: "Cada quantidade de equipes",
+    detail: (point) => `<div class="table-wrap"><table class="sheet">
+      <thead><tr><th>Equipes</th><th>SLA</th><th>Espera</th><th>Utilização</th></tr></thead>
+      <tbody>${rows.map((row, index) => `<tr class="${point && point.row === row ? "is-selected" : ""}" data-row="${index}">
+        <td>${row.teams}</td><td>${String(row.sla_pct).replace(".", ",")}%</td><td>${String(row.wait_min).replace(".", ",")} min</td><td>${String(row.utilization_pct).replace(".", ",")}%</td>
+      </tr>`).join("") || `<tr><td colspan="4">Sem simulação.</td></tr>`}</tbody>
+    </table></div>`,
+    footnote: item.method || "O gráfico mostra o SLA de espera para cada quantidade de equipes.",
+  };
 }
 
-function staffing(pack) {
-  const item = pack.staffing;
-  return `<section class="page">
-    <h1>Dimensionamento de equipe</h1>
-    <p class="hint">${esc(item.method)}</p>
-    <p><b>${esc(item.sentence)}</b></p>
-    <p class="hint">Chegadas ${esc(String(item.rate_per_hour))} por hora. Atendimento médio ${esc(String(item.service_min))} min. Espera aceita ${esc(String(item.wait_limit_min))} min.</p>
-    ${chart((item.rows || []).map((row) => ({ month: String(row.teams), total: row.sla_pct })))}
-    <ul class="rows">${(item.rows || []).map((row) => `<li><b>${row.teams} equipes</b> SLA ${row.sla_pct}% · espera ${row.wait_min} min · utilização ${row.utilization_pct}%</li>`).join("")}</ul>
-  </section>`;
+function calibrationModel(item) {
+  const labels = { vencida: "Vencida", "7": "7 dias", "15": "15 dias", "30": "30 dias" };
+  const rows = asList(item.rows);
+  const points = Object.keys(labels).map((bucket) => {
+    const found = rows.filter((row) => row.bucket === bucket);
+    return {
+      label: labels[bucket],
+      value: found.length,
+      display: labels[bucket],
+      detail: found.length === 1 ? "1 equipamento nesta janela." : `${found.length} equipamentos nesta janela.`,
+      bucket,
+    };
+  });
+  return {
+    title: "Aferição",
+    lede: item.note || "Prazos de validade do cadastro.",
+    stats: [
+      ["Fora de conformidade", item.expired ?? 0, item.method || ""],
+      ["Autuações simuladas", item.citations ?? 0, "Quantidade vencida vezes a taxa parametrizável. Não é um auto real."],
+    ],
+    points,
+    detailTitle: "Equipamentos na janela",
+    detail: (point) => {
+      const shown = point ? rows.filter((row) => row.bucket === point.bucket) : rows;
+      return `<ul class="rows">${shown.map((row) => `<li><b>${esc(row.serial)}</b> ${esc(labels[row.bucket] || row.bucket)} · ${esc(row.orgao || "órgão não informado")} · validade ${esc(row.validade_afericao || "")}${row.fora_de_conformidade ? " · fora de conformidade" : ""}</li>`).join("") || "<li>Nenhum radar ou balança na janela.</li>"}</ul>`;
+    },
+    footnote: item.method || "A lista usa a data de validade do cadastro.",
+  };
+}
+
+function valueModel(item, pack) {
+  const presence = pack.presence || {};
+  const violations = Number(item.violations) || 0;
+  return {
+    title: "Valor entregue",
+    lede: item.staff_recommendation || "Sem recomendação de equipe neste momento.",
+    stats: [
+      ["Rotas evitadas", money(item.trip_savings), "Minutos poupados na rota do dia vezes R$ 1,80."],
+      ["Multas identificadas", money(item.fines_identified), "Violações de SLA vezes a multa do primeiro contrato."],
+      ["Fora de conformidade", item.expired_equipment ?? 0, "Equipamentos com validade de aferição vencida."],
+      ["Presença válida", `${item.presence_pct ?? 0}%`, presence.method || "OS encerradas com conclusão válida."],
+    ],
+    points: [
+      { label: "Rotas", value: Number(item.trip_savings) || 0, display: money(item.trip_savings), detail: `${item.saved_min || 0} min poupados na rota do dia, a R$ 1,80.` },
+      { label: "Multas", value: Number(item.fines_identified) || 0, display: money(item.fines_identified), detail: `${violations} ${violations === 1 ? "violação" : "violações"} de SLA, na multa do primeiro contrato.` },
+    ],
+    detailTitle: "Como a conta foi feita",
+    detail: () => `<ul class="rows">
+      <li><b>Rotas</b> ${esc(String(item.saved_min || 0))} min poupados na rota do dia.</li>
+      <li><b>Contratos</b> ${esc(String(violations))} ${violations === 1 ? "violação" : "violações"} de SLA.</li>
+      <li><b>Aferição</b> autuações simuladas: ${esc(String(item.citations_simulated || 0))}.</li>
+      <li><b>Orçamento</b> diferença da projeção para o ano: ${money(item.budget_gap)}.</li>
+    </ul>`,
+    footnote: `${item.premises || ""} ${item.method || ""}`.trim(),
+  };
 }
 
 function knowledge(pack) {
-  const rows = pack.knowledge || [];
-  const tips = rows.reduce((sum, row) => sum + (row.count || row.entries?.length || 0), 0);
+  const rows = asList(pack.knowledge);
+  const tips = rows.reduce((sum, row) => sum + (row.count || asList(row.entries).length || 0), 0);
   const body = rows.map((row) => {
-    const entries = row.entries || (row.tips || []).map((tip) => ({ tip }));
+    const entries = asList(row.entries).length ? asList(row.entries) : asList(row.tips).map((tip) => ({ tip }));
     return `<section class="knowledge-group" data-model="${esc(row.model)}">
       <h2>${esc(row.model)} <span>${esc(row.type || "modelo")} · ${row.count || entries.length} dicas</span></h2>
       <div class="table-wrap"><table class="sheet">
@@ -140,38 +286,16 @@ function knowledge(pack) {
     <h2>Registrado no fechamento</h2>
     ${body || "<p>Nenhuma dica registrada no fechamento das OS.</p>"}
     <h2>Útil para as OS abertas</h2>
-    ${(pack.knowledge_open || []).map((row) => `<article class="knowledge-group" data-model="${esc(row.model)} ${esc(row.order)}">
+    ${asList(pack.knowledge_open).map((row) => `<article class="knowledge-group" data-model="${esc(row.model)} ${esc(row.order)}">
       <h2>${esc(row.order)} <span>${esc(row.model)} · ${esc(row.region)} · ${esc(row.status)}</span></h2>
-      <ul class="rows">${(row.tips || []).map((tip) => `<li>${esc(tip)}</li>`).join("")}</ul>
+      <ul class="rows">${asList(row.tips).map((tip) => `<li>${esc(tip)}</li>`).join("")}</ul>
     </article>`).join("") || "<p class='hint'>Nenhuma OS aberta aproveita uma dica já registrada.</p>"}
-  </section>`;
-}
-
-function value(pack) {
-  const item = pack.value || {};
-  return `<section class="page">
-    <h1>Valor entregue</h1>
-    <p><b>${esc(item.staff_recommendation || "Sem recomendação de equipe neste momento.")}</b></p>
-    ${cards([
-      ["Rotas evitadas", money(item.trip_savings), "Minutos poupados na rota do dia vezes R$ 1,80."],
-      ["Multas identificadas", money(item.fines_identified), "Violações de SLA vezes a multa do primeiro contrato."],
-      ["Fora de conformidade", item.expired_equipment ?? 0, "Equipamentos com validade de aferição vencida."],
-      ["Presença válida", `${item.presence_pct ?? 0}%`, pack.presence?.method || "OS encerradas com conclusão válida."],
-    ])}
-    <h2>Como a conta foi feita</h2>
-    <ul class="rows">
-      <li><b>Rotas</b> ${esc(String(item.saved_min || 0))} min poupados na rota do dia.</li>
-      <li><b>Contratos</b> ${esc(String(item.violations || 0))} ${Number(item.violations) === 1 ? "violação" : "violações"} de SLA.</li>
-      <li><b>Aferição</b> autuações simuladas: ${esc(String(item.citations_simulated || 0))}.</li>
-      <li><b>Orçamento</b> diferença da projeção para o ano: ${money(item.budget_gap)}.</li>
-    </ul>
-    <p class="hint">${esc(item.premises || "")} ${esc(item.method || "")}</p>
   </section>`;
 }
 
 function integrity(pack) {
   const verdict = pack.verdict || {};
-  const rows = pack.tail || [];
+  const rows = asList(pack.tail);
   const last = rows[rows.length - 1] || {};
   return `<section class="page">
     <h1>Integridade</h1>

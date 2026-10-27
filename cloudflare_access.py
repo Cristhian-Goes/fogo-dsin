@@ -44,20 +44,18 @@ def public_status() -> dict:
     return {"enabled": configured(), "required": required()}
 
 
+# Chave pública do widget. O segredo continua só no ambiente.
+_PUBLIC_TURNSTILE_SITEKEY = "0x4AAAAAAFm7oNadai9dSVeV"
+# Par publicado pela Cloudflare para o widget de teste que sempre mostra "Sucesso!".
+# Só vale quando o Host é este computador. Na Vercel o segredo real continua obrigatório.
+_LOCAL_TURNSTILE_SECRET = "1x0000000000000000000000000000000AA"
+
+
 def turnstile_sitekey() -> str:
-    if not os.environ.get("CF_TURNSTILE_SECRET", "").strip():
-        return ""
-    return os.environ.get("CF_TURNSTILE_SITEKEY", "").strip()
+    return (os.environ.get("CF_TURNSTILE_SITEKEY") or _PUBLIC_TURNSTILE_SITEKEY).strip()
 
 
-def verify_turnstile(token: str, remote_ip: str) -> None:
-    secret = os.environ.get("CF_TURNSTILE_SECRET", "").strip()
-    if not secret:
-        return
-    if not token:
-        if remote_ip in {"127.0.0.1", "::1", "localhost"}:
-            return
-        raise access.Denied("Confirme a verificação da Cloudflare antes de entrar.")
+def _siteverify(secret: str, token: str, remote_ip: str) -> dict:
     import urllib.parse
     body = urllib.parse.urlencode({
         "secret": secret,
@@ -69,13 +67,27 @@ def verify_turnstile(token: str, remote_ip: str) -> None:
         data=body,
         headers={"User-Agent": "FOGO-CCO/1.0"},
     )
+    with urllib.request.urlopen(request, timeout=8) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    return payload if isinstance(payload, dict) else {}
+
+
+def verify_turnstile(token: str, remote_ip: str, *, local: bool = False) -> None:
+    secret = os.environ.get("CF_TURNSTILE_SECRET", "").strip()
+    if not secret and not local:
+        return
+    if not token:
+        if local:
+            return
+        raise access.Denied("Confirme a verificação da Cloudflare antes de entrar.")
     try:
-        with urllib.request.urlopen(request, timeout=8) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        if secret and _siteverify(secret, token, remote_ip).get("success"):
+            return
+        if local and _siteverify(_LOCAL_TURNSTILE_SECRET, token, remote_ip).get("success"):
+            return
     except Exception:
         raise access.Denied("A Cloudflare não respondeu a verificação. Tente de novo.")
-    if not payload.get("success"):
-        raise access.Denied("A verificação da Cloudflare não confere.")
+    raise access.Denied("A verificação da Cloudflare não confere.")
 
 
 def identity(token: str | None) -> dict:

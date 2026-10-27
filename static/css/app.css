@@ -89,7 +89,17 @@ button { cursor: pointer; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 12px 0; }
 .stat-grid article { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
 .stat-grid b { display: block; font-size: 20px; margin-top: 4px; }
-.chart { width: 100%; height: 180px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.chart-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 8px 4px; margin: 8px 0 16px; }
+.chart { width: 100%; height: auto; background: transparent; border: 0; display: block; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .line { fill: none; stroke: var(--action); stroke-width: 2; }
+.chart .axis, .chart .tick { fill: var(--muted); font-size: 11px; }
+.chart .chart-point circle { fill: var(--panel); stroke: var(--action); stroke-width: 2; cursor: pointer; }
+.chart .chart-point.is-on circle { fill: var(--action); }
+.chart .chart-point circle:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+.chart-readout { margin: 4px 8px 10px; min-height: 1.45em; font-variant-numeric: tabular-nums; }
+.dash-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.stat-grid b, .sheet td { font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .day-layout, .kanban { grid-template-columns: 1fr; } }
 html[data-theme="dark"] {
   --bg: #12171c;
@@ -587,8 +597,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--action); outline
 .knowledge-group h2 { font-size: 16px; margin: 0 0 8px; }
 .knowledge-group h2 span { color: var(--muted); font-weight: 400; font-size: 13px; }
 .sheet tbody tr { cursor: default; }
-#turnstile-box { min-height: 68px; margin: 4px 0 4px; }
+.sheet tbody tr[data-row] { cursor: pointer; }
+#turnstile-box { min-height: 65px; margin: 4px 0 8px; }
 #turnstile-box:empty { display: none; }
+#turnstile-box.is-local { height: 40px; max-height: 40px; min-height: 0; overflow: hidden; }
 
 @media (max-width: 1100px) {
   .shell, .shell.has-dock { grid-template-columns: 1fr; grid-template-rows: 52px auto minmax(280px, 1fr) auto; }
@@ -669,6 +681,7 @@ html[data-theme="dark"] tbody tr:hover td { background: #243040; }
 html[data-theme="dark"] tr.is-selected td { background: #1a3a2e; color: var(--ink); }
 html[data-theme="dark"] .chat-log article.is-user { background: #1a3a2e; }
 html[data-theme="dark"] .primary { background: var(--action); color: #fff; }
+html[data-theme="dark"] .dash-switch button[aria-selected="true"] { background: var(--action); color: #fff; border-color: var(--action); }
 html[data-theme="dark"] nav button.is-on { background: #1b6b45; color: #fff; }
 
 @media (max-width: 720px) {
