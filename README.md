@@ -96,13 +96,22 @@ O cenário “Rodar cenário de demonstração”, na tela Inteligência, percor
 
 ## Decisões de UX
 
-A pessoa na central precisa ver, em poucos segundos, o que exige atenção. O menu principal tem nove destinos: Central, O que fazer agora, Ordens de serviço, Rotas, Equipamentos, Agentes, Previsões, Impacto e Configurações. O restante continua em Mais, para não esconder telas que já existiam.
+A interface é densa e operacional. O menu não tem o item "Mais". Os destinos ficam em quatro grupos, e cada perfil só vê o que a matriz de acesso já permitia:
 
-A barra superior concentra a saúde da cidade, a busca (também em Ctrl+K), o sino de alertas críticos, o modo crise, o tema e o usuário. A paleta de comandos acha equipamento, agente, OS, bairro e tela. A tecla ? lista os atalhos. O primeiro acesso mostra um tour de cinco passos, que pode ser pulado.
+- Operação: Central, Fila de decisões, Ocorrências, Ordens de serviço, Rotas, Alertas, Modo campo
+- Cadastros: Equipamentos, Agentes, Equipes, Veículos, Regiões
+- Análise: Previsões, Impacto, Financeiro, Conformidade, Valor entregue, Conhecimento, Linha do tempo, Histórico, Auditoria
+- Sistema: Configurações
 
-As cores de situação são as mesmas em badge, mapa e tabela: verde operacional, amarelo atenção, laranja suspeito, vermelho crítico, azul em manutenção, roxo não instalado, cinza desativado. O texto acompanha a cor. A fonte é Segoe UI, no próprio sistema, para a central abrir sem baixar fonte da internet. O corpo tem 14 px e os botões, no mínimo 40 px.
+Veículos continua sendo a frota. Não há uma tela de fornecedores. Auditoria é a cadeia de hash que antes se chamava Integridade no menu.
 
-Na Central, cinco indicadores ficam no topo e o que fazer agora fica na coluna direita. O quadro de OS aceita arrastar o card de estágio. O formulário de equipamento está em Identificação, Situação e Localização.
+Status e prioridade usam um único componente: ponto de 8 px e texto na cor neutra do tema. A cor fica só no ponto. "Crítica" é a única situação com texto vermelho e peso 600. Nas listas, a linha crítica ganha uma barra de 3 px na esquerda, sem fundo colorido. Verde, amarelo e laranja não pintam cartão, badge nem linha. O azul `#1d4e89` é a única cor de ação e de seleção. O raio máximo é 6 px.
+
+A ordem de serviço abre na mesma tela: quadro, lista ou mapa à esquerda, detalhe à direita. A última visão fica gravada neste navegador. Criar OS abre uma janela lateral. O prazo aparece como "2h 10min restantes" ou "Atrasada 35min", em vermelho só quando atrasado. Rotas do dia usam o mapa grande e um painel recolhível; o resultado da otimização é uma linha ("-12 km, -34 min").
+
+As tabelas de equipamentos, agentes, veículos e da lista de OS passam pelo mesmo componente: ordenação, busca, filtro de coluna, paginação, colunas visíveis, densidade e CSV. O cabeçalho fica fixo, sem zebra e sem borda vertical.
+
+Os PDFs de OS, folha de rota e auditoria saem do mesmo gerador, em A4, com margem de 20 mm, cabeçalho, rodapé e paginação. OS e auditoria levam um código de verificação de 8 caracteres, calculado sobre o texto do documento. O PDF não desenha um QR: uma matriz incorreta não abriria o registro. O arquivo leva número, assunto e data. A fonte da tela continua sendo Segoe UI, do sistema. Helvetica entra só no PDF.
 
 ## Valor para a gestão
 

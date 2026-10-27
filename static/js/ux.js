@@ -3,7 +3,7 @@ import { state } from "./state.js";
 
 const TITLES = {
   cco: "Central",
-  inteligencia: "O que fazer agora",
+  inteligencia: "Fila de decisões",
   ordens: "Ordens de serviço",
   rotas: "Rotas",
   inventario: "Equipamentos",
@@ -22,7 +22,7 @@ const TITLES = {
   conformidade: "Conformidade",
   dimensionamento: "Equipes",
   conhecimento: "Conhecimento",
-  integridade: "Integridade",
+  integridade: "Auditoria",
   valor: "Valor entregue",
 };
 
@@ -115,9 +115,9 @@ export function maybeTour(show) {
   if (open.length && ["cco", "inteligencia", "ordens", "rotas"].some((view) => !open.includes(view))) return;
   const steps = [
     ["cco", "Central", "O mapa fica no centro. A coluna da direita responde o que exige atenção agora."],
-    ["inteligencia", "O que fazer agora", "A fila tem no máximo 7 ações, com o motivo e quem deve fazer."],
-    ["ordens", "Ordens de serviço", "Cada card mostra prioridade e prazo. Arraste para mudar o estágio."],
-    ["rotas", "Rotas", "Otimizar tudo mostra quilômetros e minutos em relação à rota ingênua."],
+    ["inteligencia", "Fila de decisões", "Até 7 ações, com motivo e responsável."],
+    ["ordens", "Ordens de serviço", "Quadro, lista ou mapa. O detalhe fica à direita."],
+    ["rotas", "Rotas", "Otimizar mostra a diferença em km e minutos."],
     ["inteligencia", "Demonstração", "O botão Rodar cenário de demonstração percorre o roteiro do vídeo."],
   ];
   let index = 0;

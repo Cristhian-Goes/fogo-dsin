@@ -298,7 +298,7 @@ function integrity(pack) {
   const rows = asList(pack.tail);
   const last = rows[rows.length - 1] || {};
   return `<section class="page">
-    <h1>Integridade</h1>
+    <h1>Auditoria</h1>
     <p><b>${verdict.ok ? "A cadeia confere." : esc(verdict.reason || "A cadeia falhou.")}</b> ${verdict.ok ? `${verdict.count || rows.length} registros encadeados.` : ""}</p>
     ${cards([
       ["Registros na cadeia", verdict.count ?? rows.length, "Cada registro guarda o hash do anterior."],

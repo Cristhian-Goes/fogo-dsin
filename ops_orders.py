@@ -119,24 +119,47 @@ def advance(data: dict, order_id: str, status: str, note: str, moment: datetime,
     return {"item": present(order, moment), "message": message, "focus": {"kind": "order", "id": order["id"]}}
 
 
-def pdf(data: dict, order_id: str, moment: datetime) -> bytes:
+def pdf(data: dict, order_id: str, moment: datetime, issuer: str = "sistema") -> bytes:
+    import ops_pdf
+
     order = present(model._must(data.get("orders") or [], order_id, "Ordem de serviço"), moment)
-    lines = [
-        f"F.O.G.O.  Ordem de servico {order['number']}",
-        f"Equipamento: {order.get('serial')}  {order.get('street')}",
-        f"Regiao: {order.get('region') or '-'}",
-        f"Tipo: {order['kind']}   Prioridade: {order['priority']}",
-        f"Status: {order['status']}",
-        f"Responsavel: {order.get('agent_name') or 'nao atribuida'}",
-        f"Aberta: {order['opened_at']}",
-        f"Limite: {order['due_at']}",
-        f"Descricao: {order.get('description') or '-'}",
-        "",
-        "Historico",
-    ]
-    for event in (order.get("events") or [])[:8]:
-        lines.append(f"- {event.get('at', '')[:16]}  {event.get('text', '')}")
-    return _pdf(lines)
+    events = [[str(event.get("at") or "")[:16].replace("T", " "), event.get("text") or ""] for event in (order.get("events") or [])[:12]]
+    return ops_pdf.render({
+        "org": "F.O.G.O.  Central de Controle Operacional",
+        "title": "Ordem de serviço",
+        "number": order.get("number") or order_id,
+        "id": order.get("id") or order_id,
+        "issued_at": moment.strftime("%d/%m/%Y %H:%M"),
+        "issued_by": issuer,
+        "verify": True,
+        "sections": [
+            {"title": "Equipamento", "pairs": [
+                ("Série", order.get("serial") or "—"),
+                ("Tipo", order.get("kind") or "—"),
+                ("Local", order.get("street") or "—"),
+                ("Região", order.get("region") or "—"),
+                ("Coordenadas", f"{order.get('lat') or '—'}, {order.get('lng') or '—'}"),
+            ]},
+            {"title": "Serviço", "pairs": [
+                ("Prioridade", order.get("priority") or "—"),
+                ("Status", order.get("status") or "—"),
+                ("Responsável", order.get("agent_name") or "não atribuída"),
+                ("Aberta", str(order.get("opened_at") or "")[:16].replace("T", " ")),
+                ("Limite", str(order.get("due_at") or "")[:16].replace("T", " ")),
+            ], "lines": [order.get("description") or "—"]},
+            {"title": "Checklist", "lines": ["[ ] Equipamento identificado", "[ ] Local conferido", "[ ] Serviço executado", "[ ] Fotos registradas"]},
+            {"title": "Observações", "lines": [order.get("notes") or ""]},
+            {"title": "Linha do tempo", "table": {"headers": ["Quando", "Registro"], "rows": events or [["—", "Sem eventos"]]}},
+            {"title": "Assinaturas", "signs": ["Técnico", "Responsável"]},
+        ],
+    })
+
+
+def pdf_filename(data: dict, order_id: str, moment: datetime) -> str:
+    import ops_pdf
+
+    order = model._must(data.get("orders") or [], order_id, "Ordem de serviço")
+    return ops_pdf.filename(order.get("number") or order_id, order.get("serial") or order.get("street") or "os", moment)
 
 
 def _open(data: dict, eq: dict, kind: str, priority: str, description: str, moment: datetime, actor: str) -> dict:

@@ -17,7 +17,7 @@ export function mount(main) {
         <button type="button" class="ghost" data-action="handoff">Gerar passagem de turno</button>
       </div>
       <p id="demo-log" class="hint"></p>
-      <h2>O que fazer agora</h2>
+      <h2>Fila de decisões</h2>
       <p class="hint" title="${esc(intel.methods?.wait || "")}">No máximo 7 ações. O custo da espera está na frase.</p>
       <ul class="rows">
         ${(intel.decisions || []).map((item) => `

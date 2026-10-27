@@ -182,10 +182,6 @@ export function mountRotas(main) {
   routeMap?.remove();
   routeMap = null;
   const records = routeRecords();
-  const live = records.filter((item) => item.mode === "live").length;
-  const planned = records.filter((item) => item.mode === "plan").length;
-  const delayed = state.bootstrap.incidents.filter((item) => (item.response?.compare || "").includes("passou")).length;
-  const withIncident = records.filter((item) => item.hasIncident).length;
   const agents = state.bootstrap.agents.filter((agent) => agent.duty !== "indisponivel");
   if (!routeAgentId && agents[0]) routeAgentId = agents[0].id;
   const agent = state.bootstrap.agents.find((item) => item.id === routeAgentId);
@@ -195,11 +191,10 @@ export function mountRotas(main) {
   const choices = routeChoices();
   main.innerHTML = `
     <section class="page route-page">
-      <div class="route-section">
-        <h1>Rotas</h1>
-        <p>Em andamento ${live} · Planejadas ${planned} · Encerradas com atraso registrado ${delayed} · Com ocorrência ${withIncident}.</p>
-      </div>
+      <header class="page-head"><h1>Rotas</h1></header>
       <div id="day-board"></div>
+      <details>
+        <summary>Sequência avulsa</summary>
       <section class="route-section">
         <h2>Percursos com geometria viária</h2>
         <ul class="rows">
@@ -249,6 +244,7 @@ export function mountRotas(main) {
           </div>
         </div>
       </section>
+      </details>
     </section>`;
   const select = document.getElementById("route-agent");
   select?.addEventListener("change", () => {
@@ -272,7 +268,12 @@ export function mountRotas(main) {
     const node = document.getElementById("route-count");
     if (node) node.textContent = `${routeStops.length} destino(s) marcado(s).`;
   });
-  drawRouteMap(agent);
+  const routeDetails = document.getElementById("route-map")?.closest("details");
+  if (routeDetails && !routeDetails.open) {
+    routeDetails.addEventListener("toggle", () => {
+      if (routeDetails.open) drawRouteMap(agent);
+    });
+  } else drawRouteMap(agent);
   routes.paint(document.getElementById("day-board"));
 }
 
@@ -387,11 +388,13 @@ function drawRouteMap(agent) {
   routeMap = L.map(node, { zoomControl: false }).setView([-22.48, -50.15], 9);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(routeMap);
   if (agent) L.circleMarker([agent.lat, agent.lng], { radius: 6, color: "#1f4e79" }).addTo(routeMap).bindTooltip(agent.name);
-  if (agent?.plan?.polyline?.length >= 2 && (agent.plan.road || agent.plan.approximate)) {
+  if (agent?.plan?.polyline?.length >= 3 && (agent.plan.road || agent.plan.approximate)) {
     const line = L.polyline(agent.plan.polyline, { color: agent.plan.approximate ? "#8a5a00" : "#1f4e79", dashArray: agent.plan.approximate ? "2 8" : "6 6" }).addTo(routeMap);
     routeMap.fitBounds(line.getBounds(), { padding: [20, 20] });
   }
-  setTimeout(() => routeMap.invalidateSize(), 60);
+  setTimeout(() => {
+    if (routeMap && document.body.contains(routeMap.getContainer())) routeMap.invalidateSize();
+  }, 60);
 }
 
 export function suggestRoute() {

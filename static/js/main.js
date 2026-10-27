@@ -14,31 +14,11 @@ import * as routes from "./routes.js";
 import { go, state } from "./state.js";
 import * as ux from "./ux.js";
 
-const PRIMARY = [
-  ["cco", "Central"],
-  ["inteligencia", "O que fazer agora"],
-  ["ordens", "Ordens de serviço"],
-  ["rotas", "Rotas"],
-  ["inventario", "Equipamentos"],
-  ["agentes", "Agentes"],
-  ["previsao", "Previsões"],
-  ["impacto", "Impacto"],
-  ["acessos", "Configurações"],
-];
-const MORE = [
-  ["ocorrencias", "Ocorrências"],
-  ["frota", "Veículos"],
-  ["regioes", "Regiões"],
-  ["alertas", "Alertas"],
-  ["linha", "Linha do tempo"],
-  ["historico", "Histórico"],
-  ["campo", "Modo campo"],
-  ["financeiro", "Financeiro"],
-  ["conformidade", "Conformidade"],
-  ["dimensionamento", "Equipes"],
-  ["conhecimento", "Conhecimento"],
-  ["integridade", "Integridade"],
-  ["valor", "Valor entregue"],
+const GROUPS = [
+  ["Operação", ["cco", "inteligencia", "ocorrencias", "ordens", "rotas", "alertas", "campo"]],
+  ["Cadastros", ["inventario", "agentes", "dimensionamento", "frota", "regioes"]],
+  ["Análise", ["previsao", "impacto", "financeiro", "conformidade", "valor", "conhecimento", "linha", "historico", "integridade"]],
+  ["Sistema", ["acessos"]],
 ];
 
 function allowed(view) {
@@ -155,9 +135,10 @@ function renderShell() {
       <nav aria-label="Seções">
         <div class="nav-links">
           <button type="button" data-action="toggle-nav" title="Recolher menu">${ux.glyph("linha")}<span class="nav-text">Recolher</span></button>
-          ${PRIMARY.filter(([id]) => allowed(id)).map(([id, label]) => navButton(id, label)).join("")}
-          ${MORE.some(([id]) => allowed(id)) ? `<button type="button" data-action="toggle-more" title="Mais telas" aria-expanded="true">${ux.glyph("linha")}<span class="nav-text">Mais</span></button>
-          <div id="nav-more">${MORE.filter(([id]) => allowed(id)).map(([id, label]) => navButton(id, label)).join("")}</div>` : ""}
+          ${GROUPS.map(([label, ids]) => {
+            const buttons = ids.filter(allowed).map((id) => navButton(id, ux.title(id))).join("");
+            return buttons ? `<p class="nav-label">${esc(label)}</p>${buttons}` : "";
+          }).join("")}
         </div>
         <p class="credit">Desenvolvido por Cristhian</p>
       </nav>

@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { sync as syncContext } from "./context.js";
 import { clockLabel, esc, toast } from "./format.js";
+import { mountTable } from "./table.js";
 import { state } from "./state.js";
 
 const TYPES = [["moto", "Moto"], ["carro", "Carro"], ["caminhonete", "Caminhonete"], ["caminhao", "Caminhão"]];
@@ -25,10 +26,8 @@ export function mount(main) {
     <section class="inventory">
       <header class="page-head">
         <h1>Veículos</h1>
-        <p>Cada ficha guarda o próprio consumo e o preço do combustível. O mapa só desenha o percurso quando o serviço devolve a geometria da via.</p>
       </header>
       <div class="inv-toolbar">
-        <input id="fleet-q" type="search" placeholder="Buscar nome, placa ou modelo" value="${esc(query)}" />
         <select id="fleet-type">${options([["", "Tipo"], ...TYPES], type)}</select>
         <select id="fleet-status">${options([["", "Situação"], ...STATUS], status)}</select>
         <select id="fleet-base">${options(bases(), base)}</select>
@@ -40,10 +39,6 @@ export function mount(main) {
         <div id="fleet-form"></div>
       </div>
     </section>`;
-  document.getElementById("fleet-q").addEventListener("input", (event) => {
-    query = event.target.value;
-    renderTable();
-  });
   document.getElementById("fleet-type").addEventListener("change", (event) => {
     type = event.target.value;
     render();
@@ -124,24 +119,23 @@ function renderTable() {
   const node = document.getElementById("fleet-table");
   if (!node) return;
   const rows = filtered();
-  node.innerHTML = rows.length ? `
-    <table>
-      <thead><tr><th>Veículo</th><th>Tipo</th><th>Placa</th><th>Consumo</th><th>R$/km</th><th>Situação</th><th>Base</th></tr></thead>
-      <tbody>
-        ${rows.map((item) => `
-          <tr data-id="${esc(item.id)}" class="${draft?.id === item.id ? "is-selected" : ""}">
-            <td>${esc(item.name)}<br><span class="hint">${esc(item.brand)} ${esc(item.model)}</span></td>
-            <td>${esc(label(TYPES, item.type))}</td>
-            <td>${esc(item.plate || "—")}</td>
-            <td>${String(item.consumption).replace(".", ",")} ${esc(item.consumption_unit)}</td>
-            <td>${perKm(item)}</td>
-            <td>${esc(label(STATUS, item.status))}${item.active === false ? " · inativo" : ""}</td>
-            <td>${esc(item.base_region)}</td>
-          </tr>`).join("")}
-      </tbody>
-    </table>` : `<p class="hint">Nenhum veículo com esses filtros.</p>`;
-  node.querySelectorAll("tr[data-id]").forEach((row) => {
-    row.addEventListener("click", () => edit(row.dataset.id));
+  mountTable(node, {
+    id: "fleet",
+    sort: "name",
+    rows,
+    rowId: (item) => item.id,
+    selected: (item) => draft?.id === item.id,
+    empty: "Nenhum veículo com esses filtros.",
+    columns: [
+      { key: "name", label: "Veículo", primary: true, value: (item) => item.name },
+      { key: "type", label: "Tipo", filter: true, value: (item) => label(TYPES, item.type) },
+      { key: "plate", label: "Placa", value: (item) => item.plate || "" },
+      { key: "consumption", label: "Consumo", align: "right", value: (item) => `${String(item.consumption).replace(".", ",")} ${item.consumption_unit || ""}` },
+      { key: "perkm", label: "R$/km", align: "right", value: (item) => perKm(item) },
+      { key: "status", label: "Situação", status: true, filter: true, value: (item) => item.status },
+      { key: "base", label: "Base", filter: true, value: (item) => item.base_region || "" },
+    ],
+    onRow: (item) => edit(item.id),
   });
 }
 

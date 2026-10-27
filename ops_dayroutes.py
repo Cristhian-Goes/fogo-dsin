@@ -140,19 +140,51 @@ def sequence_plan(agent: dict, points: list[dict], keep_order: bool) -> tuple[li
     return ordered, driven, comparison
 
 
-def pdf(data: dict, crew_id: str) -> bytes:
+def pdf(data: dict, crew_id: str, moment: datetime | None = None, issuer: str = "sistema") -> bytes:
+    import ops_pdf
+
     plan = data.get("day_plan") or {}
     crew = _crew_plan(plan, crew_id)
-    lines = [
-        crew["name"],
-        f"Distância {crew.get('distance_km', 0)} km · {crew.get('duration_min', 0)} min",
-        "Estimativa aproximada" if crew.get("approximate") else "Geometria pelas vias",
-        f"Chegada de volta: {crew.get('return_label') or '-'}",
-    ]
+    moment = moment or model.now_local()
+    rows = []
     for stop in crew.get("stops") or []:
-        flag = " · SLA em risco" if stop.get("late") else ""
-        lines.append(f"{stop.get('order')}. {stop.get('label')} · ETA {stop.get('eta_label') or '-'}{flag}")
-    return _pdf(lines)
+        rows.append([
+            stop.get("order") or "",
+            stop.get("label") or "",
+            stop.get("eta_label") or "-",
+            stop.get("priority") or "",
+            "SLA" if stop.get("late") else "",
+            "[ ]",
+        ])
+    return ops_pdf.render({
+        "org": "F.O.G.O.  Central de Controle Operacional",
+        "title": "Folha de rota",
+        "number": crew.get("name") or crew_id,
+        "id": crew_id,
+        "issued_at": moment.strftime("%d/%m/%Y %H:%M"),
+        "issued_by": issuer,
+        "sections": [
+            {"title": "Resumo", "pairs": [
+                ("Distância", f"{crew.get('distance_km', 0)} km"),
+                ("Duração", f"{crew.get('duration_min', 0)} min"),
+                ("Volta", crew.get("return_label") or "—"),
+                ("Geometria", "estimativa aproximada" if crew.get("approximate") else "pelas vias"),
+            ]},
+            {"title": "Paradas", "table": {
+                "headers": ["N", "Endereço", "ETA", "Prioridade", "Prazo", "Feito"],
+                "rows": rows or [["—", "Sem paradas", "", "", "", ""]],
+            }},
+        ],
+    })
+
+
+def pdf_filename(data: dict, crew_id: str, moment: datetime | None = None) -> str:
+    import ops_pdf
+
+    plan = data.get("day_plan") or {}
+    crew = _crew_plan(plan, crew_id)
+    moment = moment or model.now_local()
+    return ops_pdf.filename(crew.get("name") or "rota", crew_id, moment)
 
 
 def maps_url(crew: dict) -> str:

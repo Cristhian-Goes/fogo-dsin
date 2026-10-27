@@ -1,6 +1,7 @@
 import { api } from "./api.js";
-import { esc, pill, toast, typeLabel } from "./format.js";
+import { esc, toast, typeLabel } from "./format.js";
 import { go, state } from "./state.js";
+import { mountTable } from "./table.js";
 
 let tab = "equipment";
 let picker = null;
@@ -10,16 +11,13 @@ export function mount(main) {
     <section class="inventory">
       <header class="page-head">
         <h1>Equipamentos e agentes</h1>
-        <p>Consulte a lista, abra um registro para editar e salve só quando os dados estiverem certos.</p>
       </header>
       <div class="inv-toolbar">
         <div class="tabs">
           <button type="button" data-tab="equipment" class="${tab === "equipment" ? "is-on" : ""}">Equipamentos</button>
           <button type="button" data-tab="agent" class="${tab === "agent" ? "is-on" : ""}">Agentes</button>
         </div>
-        <input id="inv-q" type="search" placeholder="Filtrar a lista" />
         <button type="button" class="primary" id="inv-new">${tab === "equipment" ? "Novo equipamento" : "Novo agente"}</button>
-        <button type="button" class="ghost" id="inv-csv">Exportar CSV</button>
       </div>
       <div class="inv-body">
         <div class="table-wrap" id="inv-table"></div>
@@ -33,12 +31,7 @@ export function mount(main) {
       mount(main);
     });
   });
-  document.getElementById("inv-q").addEventListener("input", () => {
-    tablePage = 0;
-    renderTable();
-  });
   document.getElementById("inv-new").addEventListener("click", () => openNew());
-  document.getElementById("inv-csv").addEventListener("click", exportCsv);
   renderTable();
   renderForm();
 }
@@ -88,119 +81,72 @@ function openNew() {
 }
 
 function renderTable() {
-  const query = (document.getElementById("inv-q")?.value || "").trim().toLowerCase();
   const node = document.getElementById("inv-table");
   if (!node) return;
-  if (tab === "equipment") node.innerHTML = equipmentTable(query);
-  else node.innerHTML = agentTable(query);
-  node.querySelectorAll("[data-open]").forEach((row) => {
-    row.addEventListener("click", (event) => {
-      if (event.target.closest("[data-action]")) return;
-      const id = row.dataset.open;
-      const source = tab === "equipment"
-        ? state.bootstrap.equipment.find((item) => item.id === id)
-        : state.bootstrap.agents.find((item) => item.id === id);
-      state.editor = { mode: "edit", kind: tab, id, values: { ...source, attrs: { ...(source.attrs || {}) } }, coordsTouched: true };
-      renderTable();
-      renderForm();
-    });
-  });
-  node.querySelectorAll("[data-page]").forEach((button) => {
-    button.addEventListener("click", () => {
-      tablePage += Number(button.dataset.page);
-      renderTable();
-    });
-  });
-  node.querySelectorAll("[data-sort]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const key = button.dataset.sort;
-      if (sortState[tab].key === key) sortState[tab].dir *= -1;
-      else {
-        sortState[tab].key = key;
-        sortState[tab].dir = 1;
-      }
-      tablePage = 0;
-      renderTable();
-    });
-  });
+  if (tab === "equipment") mountTable(node, equipmentSpec());
+  else mountTable(node, agentSpec());
 }
 
-let tablePage = 0;
-const PAGE = 12;
-const sortState = {
-  equipment: { key: "serial", dir: 1 },
-  agent: { key: "name", dir: 1 },
-};
-
-function compareRows(rows, pick) {
-  const stateSort = sortState[tab];
-  return rows.slice().sort((a, b) => String(pick(a, stateSort.key)).localeCompare(String(pick(b, stateSort.key)), "pt-BR", { numeric: true }) * stateSort.dir);
+function openEditor(kind, id) {
+  const source = kind === "agent"
+    ? state.bootstrap.agents.find((item) => item.id === id)
+    : state.bootstrap.equipment.find((item) => item.id === id);
+  if (!source) return;
+  state.editor = { mode: "edit", kind, id, values: { ...source, attrs: { ...(source.attrs || {}) } }, coordsTouched: true };
+  renderTable();
+  renderForm();
 }
 
-function sortHead(key, label) {
-  const on = sortState[tab].key === key;
-  const mark = on ? (sortState[tab].dir > 0 ? " ↑" : " ↓") : "";
-  return `<th><button type="button" class="sort" data-sort="${key}" aria-sort="${on ? (sortState[tab].dir > 0 ? "ascending" : "descending") : "none"}">${label}${mark}</button></th>`;
-}
-
-function equipmentTable(query) {
-  const rows = state.bootstrap.equipment.filter((item) => {
+function equipmentRows() {
+  return state.bootstrap.equipment.filter((item) => {
     if (state.equipmentStatus === "indisponivel" && !["mau_funcionamento", "em_manutencao", "desativado", "furtado", "sem_comunicacao"].includes(item.status)) return false;
     if (state.region && item.region !== state.region) return false;
-    const blob = [item.serial, item.brand, item.model, typeLabel(item.type), item.neighborhood, item.city, item.street].join(" ").toLowerCase();
-    return !query || blob.includes(query);
+    return true;
   });
-  const ordered = compareRows(rows, (item, key) => {
-    if (key === "type") return typeLabel(item.type);
-    if (key === "local") return `${item.neighborhood || ""} ${item.city || ""}`;
-    if (key === "maintenance") return item.maintenance_flag || item.maintenance_need || "";
-    return item[key] || "";
-  });
-  const pages = Math.max(1, Math.ceil(ordered.length / PAGE));
-  if (tablePage >= pages) tablePage = pages - 1;
-  const slice = ordered.slice(tablePage * PAGE, tablePage * PAGE + PAGE);
-  return `
-    <p class="hint">${state.equipmentStatus === "indisponivel" ? "Filtro: equipamentos indisponíveis. " : ""}${rows.length ? `${rows.length} registro(s).` : "Nenhum equipamento com esses filtros."} ${rows.length ? "" : `<button type="button" class="ghost" data-action="clear-eq-filter">Limpar filtros</button>`}</p>
-    <table>
-      <thead><tr>${sortHead("status", "Situação")}${sortHead("type", "Tipo")}${sortHead("serial", "Série")}${sortHead("local", "Local")}${sortHead("maintenance", "Manutenção")}<th></th></tr></thead>
-      <tbody>
-        ${slice.map((item) => `
-          <tr data-open="${esc(item.id)}" class="${state.editor?.id === item.id ? "is-selected" : ""}">
-            <td>${pill(item.status)}</td>
-            <td>${esc(typeLabel(item.type))}</td>
-            <td><b>${esc(item.serial)}</b>${item.fora_de_conformidade ? ` <span class="pill tone-bad" title="Validade de aferição vencida. Confirme a regra com o órgão competente."><i></i>fora de conformidade</span>` : ""}<br><span class="muted">${esc(item.brand)} ${esc(item.model)}</span>${item.suspicion ? `<br><span class="is-late">${esc(item.suspicion)}: ${esc(item.suspicion_reason)}</span>` : ""}</td>
-            <td>${esc(item.neighborhood)} · ${esc(item.city)}<br><span class="muted">${esc(item.street)}</span></td>
-            <td>${esc(item.maintenance_flag || item.maintenance_need)}</td>
-            <td><button type="button" class="ghost" data-action="select" data-kind="equipment" data-id="${esc(item.id)}">Ver</button></td>
-          </tr>`).join("")}
-      </tbody>
-    </table>
-    ${pages > 1 ? `<div class="pager"><button type="button" class="ghost" data-page="-1" ${tablePage === 0 ? "disabled" : ""}>Anterior</button><span>${tablePage + 1} de ${pages}</span><button type="button" class="ghost" data-page="1" ${tablePage + 1 >= pages ? "disabled" : ""}>Próxima</button></div>` : ""}`;
 }
 
-function agentTable(query) {
-  const rows = state.bootstrap.agents.filter((item) => {
-    const blob = [item.name, item.registration, item.agency, item.region, item.role].join(" ").toLowerCase();
-    return !query || blob.includes(query);
-  });
-  const ordered = compareRows(rows, (item, key) => item[key] || "");
-  return `
-    ${ordered.length ? "" : `<p class="hint">Nenhum agente encontrado.</p>`}
-    <table>
-      <thead><tr>${sortHead("status", "Situação")}${sortHead("name", "Nome")}${sortHead("registration", "Matrícula")}${sortHead("agency", "Órgão")}${sortHead("region", "Região")}${sortHead("shift", "Turno")}</tr></thead>
-      <tbody>
-        ${ordered.map((item) => `
-          <tr data-open="${esc(item.id)}" class="${state.editor?.id === item.id ? "is-selected" : ""}">
-            <td>${pill(item.status)}</td>
-            <td><b>${esc(item.name)}</b><br><span class="muted">${esc(item.role)}</span></td>
-            <td>${esc(item.registration)}</td>
-            <td>${esc(item.agency)}</td>
-            <td>${esc(item.region)}</td>
-            <td>${esc(item.shift)}</td>
-          </tr>`).join("")}
-      </tbody>
-    </table>`;
+function equipmentSpec() {
+  const rows = equipmentRows();
+  return {
+    id: "equipment",
+    sort: "serial",
+    rows,
+    rowId: (item) => item.id,
+    selected: (item) => state.editor?.id === item.id,
+    empty: rows.length ? "Nenhum equipamento nesta busca." : "Nenhum equipamento com esses filtros.",
+    exportCsv,
+    columns: [
+      { key: "status", label: "Situação", status: true, filter: true, value: (item) => item.status },
+      { key: "type", label: "Tipo", filter: true, value: (item) => typeLabel(item.type) },
+      { key: "serial", label: "Série", primary: true, value: (item) => item.serial, html: (item) => `<b>${esc(item.serial)}</b>${item.fora_de_conformidade ? ` <span class="status" title="Validade de aferição vencida. Confirme a regra com o órgão competente."><i class="dot-bad"></i>fora de conformidade</span>` : ""}` },
+      { key: "local", label: "Local", value: (item) => `${item.neighborhood || ""} ${item.city || ""} ${item.street || ""}` },
+      { key: "maintenance", label: "Manutenção", value: (item) => item.maintenance_flag || item.maintenance_need || "" },
+      { key: "menu", label: "", menu: true },
+    ],
+    menu: (item) => [`<button type="button" class="ghost" data-action="select" data-kind="equipment" data-id="${esc(item.id)}">Abrir ficha</button>`],
+    onRow: (item) => openEditor("equipment", item.id),
+  };
+}
+
+function agentSpec() {
+  return {
+    id: "agents",
+    sort: "name",
+    rows: state.bootstrap.agents,
+    rowId: (item) => item.id,
+    selected: (item) => state.editor?.id === item.id,
+    empty: "Nenhum agente encontrado.",
+    exportCsv,
+    columns: [
+      { key: "status", label: "Situação", status: true, filter: true, value: (item) => item.status },
+      { key: "name", label: "Nome", primary: true, value: (item) => item.name },
+      { key: "registration", label: "Matrícula", value: (item) => item.registration },
+      { key: "agency", label: "Órgão", value: (item) => item.agency },
+      { key: "region", label: "Região", filter: true, value: (item) => item.region },
+      { key: "shift", label: "Turno", filter: true, value: (item) => item.shift },
+    ],
+    onRow: (item) => openEditor("agent", item.id),
+  };
 }
 
 function renderForm() {

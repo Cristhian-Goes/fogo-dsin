@@ -57,16 +57,30 @@ def verify(chain: list[dict]) -> dict:
     return {"ok": True, "count": len(chain), "reason": "A cadeia confere."}
 
 
-def pdf(chain: list[dict], verdict: dict) -> bytes:
-    import ops_orders
+def pdf(chain: list[dict], verdict: dict, moment: datetime | None = None, issuer: str = "sistema") -> bytes:
+    import ops_pdf
 
-    lines = [
-        "F.O.G.O.  Integridade da cadeia de auditoria",
-        verdict.get("reason") or "",
-        f"Registros: {len(chain)}",
-        "",
-    ]
-    for record in chain[-18:]:
-        lines.append(f"{record.get('id')}  {str(record.get('at') or '')[:16]}  {record.get('action')}  {record.get('entity')}")
-        lines.append(f"hash {str(record.get('hash_atual') or '')[:16]}")
-    return ops_orders._pdf(lines)
+    moment = moment or datetime.now().astimezone()
+    rows = [[
+        record.get("id") or "",
+        str(record.get("at") or "")[:16].replace("T", " "),
+        record.get("actor") or "",
+        record.get("action") or "",
+        str(record.get("hash_atual") or "")[:12],
+    ] for record in chain[-24:]]
+    return ops_pdf.render({
+        "org": "F.O.G.O.  Central de Controle Operacional",
+        "title": "Auditoria",
+        "number": f"{len(chain)} registros",
+        "id": "auditoria",
+        "issued_at": moment.strftime("%d/%m/%Y %H:%M"),
+        "issued_by": issuer,
+        "verify": True,
+        "sections": [
+            {"title": "Cadeia", "lines": [verdict.get("reason") or ""]},
+            {"title": "Registros", "table": {
+                "headers": ["Registro", "Quando", "Quem", "Ação", "Hash"],
+                "rows": rows or [["—", "", "", "Nenhum registro", ""]],
+            }},
+        ],
+    })

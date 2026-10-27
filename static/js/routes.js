@@ -5,6 +5,8 @@ import { state } from "./state.js";
 let map;
 let paintedAt = "";
 let playing = false;
+let selectedCrew = "";
+let panelOpen = localStorage.getItem("fogo-route-panel") !== "0";
 
 export function paint(node) {
   if (!node) return;
@@ -13,28 +15,62 @@ export function paint(node) {
   node.dataset.at = plan.created_at || "";
   paintedAt = plan.created_at || "";
   const crews = plan.crews || [];
+  if (!selectedCrew || !crews.some((item) => item.id === selectedCrew)) selectedCrew = crews[0]?.id || "";
+  const crew = crews.find((item) => item.id === selectedCrew);
+  const savedKm = Number(plan.saved_km) || 0;
+  const savedMin = Number(plan.saved_min) || 0;
+  const kmLabel = Math.abs(savedKm).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  const delta = plan.stop_count ? `${savedKm > 0 ? "-" : "+"}${kmLabel} km, ${savedMin > 0 ? "-" : "+"}${Math.abs(savedMin)} min` : "";
   node.innerHTML = `
-    <section class="route-section">
-      <h2>Rotas do dia</h2>
-      <p class="hint">${esc(plan.factor_note || "Calcule para ver distância, ETA e o comparativo com a rota ingênua.")} ${esc(plan.matrix_note || "")}</p>
-      <p class="hint">${plan.stop_count ? `${plan.stop_count} paradas. Ingênua ${plan.naive_min} min · otimizada ${plan.optimized_min} min · ${_delta(plan.saved_min)} na mesma matriz.` : "Ainda sem rota calculada. O cenário deixa pelo menos 12 OS abertas e 3 equipes."}</p>
-      <div class="actions">
-        <button type="button" class="primary" data-action="optimize-all">Otimizar tudo</button>
-        <button type="button" class="ghost" data-action="undo-routes">Desfazer</button>
-        <label class="field slim">Demonstração
-          <select id="route-speed"><option value="2">lenta</option><option value="6" selected>normal</option><option value="14">rápida</option></select>
-        </label>
-      </div>
-      <div class="day-layout">
-        <div>
-          ${crews.map(crewBlock).join("") || "<p class='hint'>Nenhuma equipe na rota.</p>"}
-          ${(plan.unassigned || []).length ? `<p class="hint">Sem equipe compatível ou sem folga na jornada: ${(plan.unassigned || []).length}.</p>` : ""}
-        </div>
-        <div id="day-map"></div>
-      </div>
-    </section>`;
+    <div class="actions">
+      <button type="button" class="primary" data-action="optimize-all">Otimizar</button>
+      <button type="button" class="ghost" data-action="undo-routes">Desfazer</button>
+      <button type="button" class="ghost" data-action="route-pdf" data-id="${esc(selectedCrew)}">Exportar</button>
+      ${delta ? `<span>${esc(delta)}</span>` : ""}
+    </div>
+    <div class="route-work${panelOpen ? "" : " is-collapsed"}">
+      <div id="day-map"></div>
+      <aside class="route-panel">
+        <button type="button" class="ghost route-fold" id="route-fold">${panelOpen ? "Recolher" : "›"}</button>
+        ${crew ? crewPanel(crew, plan) : "<p>Nenhuma equipe na rota.</p>"}
+      </aside>
+    </div>`;
   draw(crews);
   node.querySelectorAll(".stop-list").forEach(bindDrag);
+  node.querySelector("#route-crew")?.addEventListener("change", (event) => {
+    selectedCrew = event.target.value;
+    node.dataset.at = "";
+    paint(node);
+  });
+  node.querySelector("#route-fold")?.addEventListener("click", () => {
+    panelOpen = !panelOpen;
+    localStorage.setItem("fogo-route-panel", panelOpen ? "1" : "0");
+    node.dataset.at = "";
+    paint(node);
+  });
+}
+
+function crewPanel(crew, plan) {
+  const crews = plan.crews || [];
+  const km = (crew.stops || []).reduce((sum, stop) => sum + (Number(stop.leg_km) || 0), 0);
+  return `
+    <label class="field">Equipe
+      <select id="route-crew">${crews.map((item) => `<option value="${esc(item.id)}" ${item.id === crew.id ? "selected" : ""}>${esc(item.name)}</option>`).join("")}</select>
+    </label>
+    <p><b>${String(crew.distance_km || km).replace(".", ",")} km</b> · ${crew.duration_min || 0} min</p>
+    <ol class="stop-list" data-crew="${esc(crew.id)}">
+      ${(crew.stops || []).map((stop) => `
+        <li draggable="true" data-stop="${esc(stop.id)}">
+          <b>${stop.order}.</b> ${esc(stop.label)}
+          <small>ETA ${esc(stop.eta_label || "-")} · ${String(stop.leg_km || 0).replace(".", ",")} km${stop.late ? ` · <span class="is-late" title="SLA em risco">!</span> ${esc(stop.eta_label || "")}` : ""}</small>
+        </li>`).join("") || "<li>Sem paradas.</li>"}
+    </ol>
+    ${(plan.unassigned || []).length ? `<p class="hint">${plan.unassigned.length} sem equipe.</p>` : ""}
+    <div class="actions">
+      <button type="button" class="ghost" data-action="play-route" data-id="${esc(crew.id)}">Percorrer</button>
+      <button type="button" class="ghost" data-action="release-crew" data-id="${esc(crew.id)}">Indisponível</button>
+      <select id="route-speed" aria-label="Velocidade"><option value="2">lenta</option><option value="6" selected>normal</option><option value="14">rápida</option></select>
+    </div>`;
 }
 
 export function afterReload() {
@@ -83,31 +119,6 @@ export async function handle(action, button) {
   return false;
 }
 
-function crewBlock(crew) {
-  const warn = crew.approximate ? "estimativa aproximada" : "pelas vias";
-  return `
-    <article class="os-card ${crew.active === false ? "is-late" : ""}">
-      <h3 style="color:${esc(crew.color)}">${esc(crew.name)}</h3>
-      <p class="hint">${esc(crew.agent_name || "")} · ${crew.distance_km || 0} km · ${crew.duration_min || 0} min · volta ${esc(crew.return_label || "-")} · ${warn}</p>
-      <p class="hint" title="A ingênua reparte na ordem de abertura. A otimizada usa o menor desvio e 2-opt, com a crítica na frente.">Ingênua ${crew.naive_min || 0} min · nesta equipe ${_delta(crew.saved_min)}</p>
-      <ol class="stop-list" data-crew="${esc(crew.id)}">
-        ${(crew.stops || []).map((stop) => `
-          <li draggable="true" data-stop="${esc(stop.id)}" class="${stop.late ? "is-late" : ""}">
-            <b>${stop.order}.</b> ${esc(stop.label)}
-            <small>ETA ${esc(stop.eta_label || "-")} · ${esc(stop.priority || "")}${stop.late ? " · SLA em risco" : ""}</small>
-            <button type="button" class="ghost" data-action="focus-stop" data-crew="${esc(crew.id)}" data-id="${esc(stop.id)}">Ver no mapa</button>
-          </li>`).join("")}
-      </ol>
-      <div class="actions">
-        <button type="button" class="ghost" data-action="optimize-crew" data-id="${esc(crew.id)}">Otimizar esta equipe</button>
-        <button type="button" class="ghost" data-action="play-route" data-id="${esc(crew.id)}">Percorrer</button>
-        <button type="button" class="ghost" data-action="release-crew" data-id="${esc(crew.id)}">Equipe indisponível</button>
-        ${crew.maps_url ? `<a class="ghost" href="${esc(crew.maps_url)}" target="_blank" rel="noopener">Google Maps</a>` : ""}
-        <button type="button" class="ghost" data-action="route-pdf" data-id="${esc(crew.id)}">Folha PDF</button>
-      </div>
-    </article>`;
-}
-
 function draw(crews) {
   const node = document.getElementById("day-map");
   if (!node || !window.L) return;
@@ -117,8 +128,8 @@ function draw(crews) {
   const bounds = [];
   for (const crew of crews) {
     const line = crew.polyline || [];
-    if (line.length >= 2) {
-      const drawn = L.polyline(line, { color: crew.color, weight: 4, dashArray: crew.approximate ? "2 8" : null }).addTo(map);
+    if (line.length >= 3) {
+      const drawn = L.polyline(line, { color: crew.color, weight: 3, dashArray: crew.approximate ? "2 8" : null }).addTo(map);
       bounds.push(drawn.getBounds());
     }
     (crew.stops || []).forEach((stop) => {
@@ -133,7 +144,9 @@ function draw(crews) {
     });
   }
   if (bounds.length) map.fitBounds(bounds.reduce((all, item) => all.extend(item), bounds[0]), { padding: [24, 24] });
-  setTimeout(() => map?.invalidateSize(), 80);
+  setTimeout(() => {
+    if (map && document.body.contains(map.getContainer())) map.invalidateSize();
+  }, 80);
 }
 
 function bindDrag(list) {

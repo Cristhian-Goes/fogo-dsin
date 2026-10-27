@@ -53,6 +53,7 @@ const STATUS = {
   aberto: ["Aguardando equipe", "bad"],
   no_local: ["No local", "info"],
   em_atendimento: ["Em atendimento", "info"],
+  parado: ["Parado", "mute"],
   encerrada: ["Encerrada", "mute"],
   ciencia: ["Encerrada", "mute"],
   disponivel: ["Disponível", "ok"],

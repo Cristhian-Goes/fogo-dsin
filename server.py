@@ -582,10 +582,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, **result})
             return
         if len(parts) == 3 and parts[0] == "day-routes" and parts[2] == "pdf" and method == "GET":
-            self._screen("rotas", "dispatch")
+            actor = self._screen("rotas", "dispatch")
             with LOCK:
-                blob = ops_dayroutes.pdf(STORE, parts[1])
-            self.send_bytes(blob, "application/pdf", f"{parts[1]}.pdf")
+                moment = model.now_local()
+                blob = ops_dayroutes.pdf(STORE, parts[1], moment, actor.get("name") or "sistema")
+                name = ops_dayroutes.pdf_filename(STORE, parts[1], moment)
+            self.send_bytes(blob, "application/pdf", name)
             return
         if parts == ["decisions"] and method == "POST":
             body = self.read_json()
@@ -661,10 +663,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, **created})
             return
         if len(parts) == 3 and parts[0] == "orders" and parts[2] == "pdf" and method == "GET":
-            self._screen("ordens")
+            actor = self._screen("ordens")
             with LOCK:
-                blob = ops_orders.pdf(STORE, parts[1], model.now_local())
-            self.send_bytes(blob, "application/pdf", f"{parts[1]}.pdf")
+                moment = model.now_local()
+                blob = ops_orders.pdf(STORE, parts[1], moment, actor.get("name") or "sistema")
+                name = ops_orders.pdf_filename(STORE, parts[1], moment)
+            self.send_bytes(blob, "application/pdf", name)
             return
         if len(parts) == 3 and parts[0] == "orders" and parts[2] == "assign" and method == "POST":
             body = self.read_json()
@@ -743,8 +747,10 @@ class Handler(BaseHTTPRequestHandler):
             access.require_view(actor, "integridade")
             with LOCK:
                 chain = list(STORE.get("ledger") or [])
-                blob = __import__("ops_ledger").pdf(chain, __import__("ops_ledger").verify(chain))
-            self.send_bytes(blob, "application/pdf", "integridade.pdf")
+                moment = model.now_local()
+                blob = __import__("ops_ledger").pdf(chain, __import__("ops_ledger").verify(chain), moment, actor.get("name") or "sistema")
+            day = moment.date().isoformat()
+            self.send_bytes(blob, "application/pdf", f"auditoria_{day}.pdf")
             return
         if parts == ["webhooks"] and method == "POST":
             actor = self._actor("admin")

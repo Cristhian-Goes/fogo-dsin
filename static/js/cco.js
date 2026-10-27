@@ -733,9 +733,7 @@ function incidentDetail(incident) {
           <li class="team${team.recommended ? " is-recommended" : ""}">
             <span><b>${esc(team.team)}</b>${team.recommended ? " · recomendada" : ""}${team.stale ? " · disponibilidade não confirmada" : ""}<br>${esc(team.name)} · ${esc(team.specialty || "")}</span>
             ${canDispatch() ? `<button type="button" class="primary" data-action="dispatch" data-incident="${esc(incident.id)}" data-agent="${esc(team.id)}" data-team="${esc(team.team)}">Atribuir</button>` : ""}
-            <span>${esc(String(team.km).replace(".", ","))} km · ETA ${team.eta_min} min · ${esc(team.duty_label)} · sinal ${esc(team.signal || "atualizado")}</span>
-            <p class="hint">${esc(team.reason || "")}</p>
-            <p class="hint">Se enviar esta equipe: ${esc(team.impact || "")}</p>
+            <span title="${esc(team.reason || "")} ${esc(team.impact || "")}">${esc(String(team.km).replace(".", ","))} km · ETA ${team.eta_min} min</span>
           </li>`).join("") || "<li>Nenhuma equipe livre neste turno.</li>"}
       </ul>`;
   } else if (!state.replay && incident.assigned_agent_id && incident.status !== "encerrada" && (canDispatch() || state.user?.role === "agente")) {
@@ -768,16 +766,16 @@ function incidentDetail(incident) {
       ${incident.response ? `<h3>Tempo de resposta</h3><p>Total ${incident.response.total_min ?? "–"} min. Despacho ${incident.response.dispatch_min ?? "–"} min, deslocamento ${incident.response.travel_min ?? "–"} min, atendimento ${incident.response.service_min ?? "–"} min.</p><p>${esc(incident.response.compare || "")}</p><button type="button" class="ghost" data-action="jump" data-jump="closed">Ver ocorrências encerradas</button>` : ""}
       ${actions}
       ${vehicleBlock(incident)}
-      ${incident.status !== "encerrada" && incident.playbook?.length ? `<h3>Procedimento</h3><ol class="steps">${incident.playbook.map((step) => `<li>${esc(step)}</li>`).join("")}</ol>` : ""}
-      <div class="actions">
+      <details>
+        <summary>Detalhes</summary>
+        ${incident.status !== "encerrada" && incident.playbook?.length ? `<ol class="steps">${incident.playbook.map((step) => `<li>${esc(step)}</li>`).join("")}</ol>` : ""}
+        <ul class="timeline">
+          ${(incident.timeline || []).map((event) => `<li><time>${esc(clockLabel(event.at))}</time>${esc(event.text)}</li>`).join("")}
+        </ul>
         ${state.crisis === incident.id
           ? `<button type="button" class="ghost" data-action="crisis-exit">Sair do modo crise</button>`
           : `<button type="button" class="ghost" data-action="crisis" data-id="${esc(incident.id)}">Modo crise</button>`}
-      </div>
-      <h3>Linha do tempo</h3>
-      <ul class="timeline">
-        ${(incident.timeline || []).map((event) => `<li><time>${esc(clockLabel(event.at))}</time>${esc(event.text)}</li>`).join("")}
-      </ul>
+      </details>
     </article>`;
 }
 
