@@ -1,5 +1,5 @@
 {
-  "buildCommand": "py -3 build.py",
+  "buildCommand": "python3 build.py",
   "outputDirectory": "public",
   "functions": {
     "api/index.py": {
@@ -7,6 +7,6 @@
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" }
+    { "source": "/api/:route*", "destination": "/api?route=:route*" }
   ]
 }

@@ -22,7 +22,7 @@ import webbrowser
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 
 def _load_env() -> None:
@@ -40,13 +40,21 @@ def _load_env() -> None:
 _load_env()
 
 
+_PUBLIC_SUPABASE_URL = "https://utjjuulbpshessqovric.supabase.co"
+_PUBLIC_SUPABASE_KEY = "sb_publishable_gMsYNmlUHuAbQhA2M15rdg_V4MMYzih"
+
+
 def supabase_public() -> dict[str, str]:
-    url = (os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL") or "").strip().rstrip("/")
+    url = (
+        os.environ.get("SUPABASE_URL")
+        or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+        or _PUBLIC_SUPABASE_URL
+    ).strip().rstrip("/")
     key = (
         os.environ.get("SUPABASE_ANON_KEY")
         or os.environ.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
         or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-        or ""
+        or _PUBLIC_SUPABASE_KEY
     ).strip()
     return {"url": url, "key": key}
 
@@ -217,9 +225,27 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:
         self._route("DELETE")
 
+    def _request_target(self) -> str:
+        raw = self.path or "/"
+        parsed = urlparse(raw)
+        if parsed.path.rstrip("/") not in {"/api", "/api/index"}:
+            return raw
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        route = (query.get("route") or [""])[0].strip("/")
+        if not route:
+            return raw
+        extra = []
+        for key, values in query.items():
+            if key == "route":
+                continue
+            for value in values:
+                extra.append(f"{quote(key, safe='')}={quote(value, safe='')}")
+        suffix = f"?{'&'.join(extra)}" if extra else ""
+        return f"/api/{route}{suffix}"
+
     def _route(self, method: str) -> None:
         try:
-            parsed = urlparse(self.path)
+            parsed = urlparse(self._request_target())
             parts = [unquote(part) for part in parsed.path.split("/") if part]
             if parts[:1] == ["api"]:
                 self._api(method, parts[1:], parse_qs(parsed.query))

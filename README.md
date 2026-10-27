@@ -38,7 +38,7 @@ Este projeto não é Next.js. Os comandos `npm install @supabase/supabase-js` e 
 
 No `.env`, ou nas variáveis da Vercel, use `SUPABASE_URL` e `SUPABASE_ANON_KEY`. A chave publicável (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`) também é aceita nesse segundo nome. `GET /api/supabase` diz se o projeto respondeu. A service role ainda não foi cadastrada: sem ela o cadastro continua em arquivo e não é gravado nas tabelas do Supabase.
 
-Na Vercel o build copia `static/` para `public/` e a API sobe em `api/index.py`. Cadastre também `FOGO_ENV=production` e `FOGO_DATA=/tmp/fogo`. A pasta `/tmp` some quando a função esfria, e a sessão fica na memória do processo. Para o cadastro sobreviver na nuvem, falta a service role e as tabelas.
+Na Vercel o build usa `python3 build.py`, copia `static/` para `public/` e a API sobe em `api/index.py`. O endereço e a chave publicável do Supabase já estão no código, então a conexão responde mesmo sem o `.env` da máquina. Cadastre `FOGO_ENV=production` e `FOGO_DATA=/tmp/fogo` se quiser deixar isso explícito no painel. A pasta `/tmp` some quando a função esfria, e a sessão fica na memória do processo. Para o cadastro sobreviver na nuvem, falta a service role e as tabelas.
 
 ## Onde está a lógica
 
