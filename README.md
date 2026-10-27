@@ -6,21 +6,54 @@ Os dados são sintéticos e reprodutíveis. O mapa de ruas usa os tiles do OpenS
 
 ## Como executar
 
-Requisito: Python 3.10 ou superior. Nenhuma instalação extra.
+Requisito: Python 3.10 ou superior. Não há pacote para instalar: `requirements.txt` só registra que a central usa a biblioteca padrão.
 
-No Windows, dê dois cliques em `iniciar.bat`, ou na pasta do projeto:
+Um comando sobe a demonstração. No Windows, dois cliques em `iniciar.bat`. No terminal, na pasta do projeto:
 
 ```bat
 py -3 server.py
 ```
 
-A central abre em `http://127.0.0.1:8080`. Encerre com Ctrl+C.
+A central abre em `http://127.0.0.1:8080`. Encerre com Ctrl+C. Se `data/store.json` não existir, essa primeira subida recria equipamentos, agentes, ocorrências e ordens de serviço. Apagar o arquivo e subir de novo faz o mesmo.
 
-Para conferir a previsão sem subir a interface:
+Para conferir a previsão sem abrir o navegador:
 
 ```bat
 py -3 server.py --check
 ```
+
+Os testes e o build da pasta estática:
+
+```bat
+py -3 -m unittest discover -s tests
+py -3 build.py
+```
+
+## Variáveis de ambiente
+
+Copie `.env.example` para `.env`. O `.env` não entra no Git. Na Vercel, cadastre os mesmos nomes no painel do projeto. Nenhum segredo vai no código.
+
+| Nome | Uso |
+| --- | --- |
+| `FOGO_ENV` | `development` ou `production` |
+| `FOGO_DATA` | Pasta do cadastro. Na Vercel, `/tmp/fogo` |
+| `FOGO_ORIGIN` | Origem do CORS. Vazio desliga |
+| `OSRM_URL` | Motor de rotas. O padrão público não pede chave |
+| `FOGO_WEBHOOK_SECRET` | Assinatura de `POST /api/webhooks/supabase` |
+| `SUPABASE_URL` | Projeto Supabase. Também aceita `NEXT_PUBLIC_SUPABASE_URL` |
+| `SUPABASE_ANON_KEY` | Chave publicável. Também aceita `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Não usada. Sem ela o cadastro continua em arquivo |
+| `CF_TURNSTILE_SITEKEY` | Widget do login. Pode ir ao navegador |
+| `CF_TURNSTILE_SECRET` | Verificação no servidor. Só no ambiente |
+| `CF_ACCESS_TEAM`, `CF_ACCESS_AUD`, `CF_ACCESS_REQUIRED` | Cloudflare Access, opcional |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Reescrita do chat, se a chave existir |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | A mesma reescrita, pela outra API |
+
+## Publicação
+
+A versão publicada fica em [https://fogo-dsin.vercel.app](https://fogo-dsin.vercel.app). O repositório é [https://github.com/Cristhian-Goes/fogo-dsin](https://github.com/Cristhian-Goes/fogo-dsin).
+
+O build da Vercel é `python3 build.py`. Ele copia `static/` para `public/`. A API sobe em `api/index.py`. Se o painel da Vercel tiver um comando de build preenchido à mão, esse valor substitui o `vercel.json`: deixe o campo vazio ou com `python3 build.py`.
 
 ## O que a central faz
 
@@ -32,13 +65,9 @@ A primeira tela pede usuário e senha. Os atalhos entram nas contas de demonstra
 
 Apagar `data/store.json` recria a cidade-piloto. `data/access.json` guarda usuários e auditoria, sem as senhas em texto.
 
-## Supabase e Vercel
+## Supabase
 
-Este projeto não é Next.js. Os comandos `npm install @supabase/supabase-js` e `npx shadcn@latest add @supabase/supabase-client-nextjs` não entram aqui. A central fala com o Supabase pela biblioteca padrão do Python.
-
-No `.env`, ou nas variáveis da Vercel, use `SUPABASE_URL` e `SUPABASE_ANON_KEY`. A chave publicável (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`) também é aceita nesse segundo nome. `GET /api/supabase` diz se o projeto respondeu. A service role ainda não foi cadastrada: sem ela o cadastro continua em arquivo e não é gravado nas tabelas do Supabase.
-
-Na Vercel o build usa `python3 build.py`, copia `static/` para `public/` e a API sobe em `api/index.py`. O endereço e a chave publicável do Supabase já estão no código, então a conexão responde mesmo sem o `.env` da máquina. Cadastre `FOGO_ENV=production` e `FOGO_DATA=/tmp/fogo` se quiser deixar isso explícito no painel. A pasta `/tmp` some quando a função esfria, e a sessão fica na memória do processo. Para o cadastro sobreviver na nuvem, falta a service role e as tabelas.
+Este projeto não é Next.js. A central fala com o Supabase pela biblioteca padrão do Python. `GET /api/supabase` diz se o projeto respondeu. O endereço e a chave publicável já estão no código, então a consulta responde mesmo sem o `.env`. A service role não está no projeto: sem ela, e sem as tabelas, o cadastro operacional continua em arquivo. Na Vercel a pasta `/tmp` some quando a função esfria, e a sessão fica na memória do processo.
 
 ## Onde está a lógica
 

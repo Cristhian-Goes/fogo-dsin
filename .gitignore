@@ -2,6 +2,12 @@
 __pycache__/
 *.pyc
 public/
+node_modules/
+dist/
+.vercel/
+coverage/
+*.log
+.DS_Store
 .venv/
 venv/
 .cursor/
