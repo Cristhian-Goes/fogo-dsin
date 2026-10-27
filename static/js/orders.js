@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { clockLabel, esc } from "./format.js";
+import { clockLabel, esc, status } from "./format.js";
 import { state } from "./state.js";
 
 const COLUMNS = [
@@ -92,9 +92,9 @@ function card(item) {
   const left = item.seconds_left;
   const clock = left >= 0 ? `faltam ${Math.floor(left / 3600)} h` : `vencida há ${Math.floor(-left / 3600)} h`;
   return `
-    <article class="os-card${item.overdue ? " is-late" : ""}" draggable="${state.user?.can_write ? "true" : "false"}" data-order="${esc(item.id)}" data-status="${esc(item.status)}">
+    <article class="os-card${item.priority === "critica" ? " is-critical" : ""}" draggable="${state.user?.can_write ? "true" : "false"}" data-order="${esc(item.id)}" data-status="${esc(item.status)}">
       <b>${esc(item.number)}</b>
-      <p>${esc(item.serial || "")} · <span class="pill tone-${item.priority === "critica" ? "bad" : item.priority === "alta" ? "warn" : "info"}"><i></i>${esc(item.priority)}</span> · ${esc(item.kind)}</p>
+      <p>${esc(item.serial || "")} · ${status(item.priority)} · ${esc(item.kind)}</p>
       <p>${esc(item.description || "")}</p>
       <p class="hint">${esc(item.agent_name || "Sem responsável")} · ${clock} · ${esc(clockLabel(item.due_at))}</p>
       ${item.conclusao === "suspeita" ? `<p class="hint">Conclusão suspeita: ${esc((item.motivos || []).join("; "))}</p>` : ""}

@@ -77,9 +77,18 @@ export function flagMeta(id) {
   return FLAGS[id] || null;
 }
 
-export function pill(id) {
+export function isCritical(id) {
+  return id === "critica";
+}
+
+export function status(id) {
   const [label, tone] = statusMeta(id);
-  return `<span class="pill tone-${tone}"><i></i>${esc(label)}</span>`;
+  const critical = isCritical(id);
+  return `<span class="status${critical ? " is-critical" : ""}"><i class="dot-${tone}"></i>${esc(label)}</span>`;
+}
+
+export function pill(id) {
+  return status(id);
 }
 
 export function typeById(id) {

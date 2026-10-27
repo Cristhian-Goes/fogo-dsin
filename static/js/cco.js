@@ -571,7 +571,7 @@ function queueHtml() {
     <h2>O que precisa da sua atenção</h2>
     <ol class="queue">
       ${items.map((item) => `
-        <li class="rank-${item.rank}">
+        <li class="${item.rank === 0 ? "is-critical" : ""}">
           <p class="why">${esc(item.why)}</p>
           <h3>${esc(item.title)}</h3>
           <p>${esc(item.where)}</p>
