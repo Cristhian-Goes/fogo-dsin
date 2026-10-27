@@ -6,10 +6,13 @@ arquivo de acesso, em hash. O servidor confere o perfil antes de gravar.
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 import json
 import os
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -252,6 +255,38 @@ def save(data: dict) -> None:
 
 
 SESSIONS: dict[str, str] = {}
+REVOKED: set[str] = set()
+SESSION_SECONDS = 24 * 60 * 60
+
+
+def _session_key() -> bytes:
+    # A mesma chave em todo processo. Sem isso, a Vercel esquece o login
+    # quando a próxima tela cai em outra instância.
+    return (os.environ.get("FOGO_SESSION_SECRET") or "fogo-session-demo").encode()
+
+
+def _issue_token(user_id: str) -> str:
+    exp = int(time.time()) + SESSION_SECONDS
+    body = base64.urlsafe_b64encode(f"{user_id}|{exp}".encode()).decode().rstrip("=")
+    sig = hmac.new(_session_key(), body.encode(), hashlib.sha256).hexdigest()
+    return f"{body}.{sig}"
+
+
+def _user_id_from_token(token: str) -> str | None:
+    if token.count(".") != 1:
+        return None
+    body, sig = token.split(".", 1)
+    expected = hmac.new(_session_key(), body.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, sig):
+        return None
+    pad = "=" * (-len(body) % 4)
+    try:
+        user_id, exp_s = base64.urlsafe_b64decode(body + pad).decode().rsplit("|", 1)
+        if int(exp_s) < int(time.time()):
+            return None
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return user_id
 
 
 def public_user(user: dict) -> dict:
@@ -278,9 +313,9 @@ def public_user(user: dict) -> dict:
 
 
 def user_by_token(token: str | None) -> dict | None:
-    if not token:
+    if not token or token in REVOKED:
         return None
-    uid = SESSIONS.get(token)
+    uid = SESSIONS.get(token) or _user_id_from_token(token)
     if not uid:
         return None
     data = load()
@@ -305,15 +340,17 @@ def login_identity(email: str, via: str) -> dict:
 
 
 def _open_session(found: dict, detail: str) -> dict:
-    token = secrets.token_urlsafe(24)
+    token = _issue_token(found["id"])
     SESSIONS[token] = found["id"]
     audit(found, "entrou", detail)
     return {"token": token, "user": public_user(found)}
 
 
 def logout(token: str | None) -> None:
-    if token and token in SESSIONS:
-        SESSIONS.pop(token, None)
+    if not token:
+        return
+    REVOKED.add(token)
+    SESSIONS.pop(token, None)
 
 
 def require(token: str | None) -> dict:
