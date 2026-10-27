@@ -111,10 +111,38 @@ function renderTable() {
       renderTable();
     });
   });
+  node.querySelectorAll("[data-sort]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const key = button.dataset.sort;
+      if (sortState[tab].key === key) sortState[tab].dir *= -1;
+      else {
+        sortState[tab].key = key;
+        sortState[tab].dir = 1;
+      }
+      tablePage = 0;
+      renderTable();
+    });
+  });
 }
 
 let tablePage = 0;
 const PAGE = 12;
+const sortState = {
+  equipment: { key: "serial", dir: 1 },
+  agent: { key: "name", dir: 1 },
+};
+
+function compareRows(rows, pick) {
+  const stateSort = sortState[tab];
+  return rows.slice().sort((a, b) => String(pick(a, stateSort.key)).localeCompare(String(pick(b, stateSort.key)), "pt-BR", { numeric: true }) * stateSort.dir);
+}
+
+function sortHead(key, label) {
+  const on = sortState[tab].key === key;
+  const mark = on ? (sortState[tab].dir > 0 ? " ↑" : " ↓") : "";
+  return `<th><button type="button" class="sort" data-sort="${key}" aria-sort="${on ? (sortState[tab].dir > 0 ? "ascending" : "descending") : "none"}">${label}${mark}</button></th>`;
+}
 
 function equipmentTable(query) {
   const rows = state.bootstrap.equipment.filter((item) => {
@@ -123,13 +151,19 @@ function equipmentTable(query) {
     const blob = [item.serial, item.brand, item.model, typeLabel(item.type), item.neighborhood, item.city, item.street].join(" ").toLowerCase();
     return !query || blob.includes(query);
   });
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+  const ordered = compareRows(rows, (item, key) => {
+    if (key === "type") return typeLabel(item.type);
+    if (key === "local") return `${item.neighborhood || ""} ${item.city || ""}`;
+    if (key === "maintenance") return item.maintenance_flag || item.maintenance_need || "";
+    return item[key] || "";
+  });
+  const pages = Math.max(1, Math.ceil(ordered.length / PAGE));
   if (tablePage >= pages) tablePage = pages - 1;
-  const slice = rows.slice(tablePage * PAGE, tablePage * PAGE + PAGE);
+  const slice = ordered.slice(tablePage * PAGE, tablePage * PAGE + PAGE);
   return `
     <p class="hint">${state.equipmentStatus === "indisponivel" ? "Filtro: equipamentos indisponíveis. " : ""}${rows.length ? `${rows.length} registro(s).` : "Nenhum equipamento com esses filtros."} ${rows.length ? "" : `<button type="button" class="ghost" data-action="clear-eq-filter">Limpar filtros</button>`}</p>
     <table>
-      <thead><tr><th>Situação</th><th>Tipo</th><th>Série</th><th>Local</th><th>Manutenção</th><th></th></tr></thead>
+      <thead><tr>${sortHead("status", "Situação")}${sortHead("type", "Tipo")}${sortHead("serial", "Série")}${sortHead("local", "Local")}${sortHead("maintenance", "Manutenção")}<th></th></tr></thead>
       <tbody>
         ${slice.map((item) => `
           <tr data-open="${esc(item.id)}" class="${state.editor?.id === item.id ? "is-selected" : ""}">
@@ -150,12 +184,13 @@ function agentTable(query) {
     const blob = [item.name, item.registration, item.agency, item.region, item.role].join(" ").toLowerCase();
     return !query || blob.includes(query);
   });
+  const ordered = compareRows(rows, (item, key) => item[key] || "");
   return `
-    ${rows.length ? "" : `<p class="hint">Nenhum agente encontrado.</p>`}
+    ${ordered.length ? "" : `<p class="hint">Nenhum agente encontrado.</p>`}
     <table>
-      <thead><tr><th>Situação</th><th>Nome</th><th>Matrícula</th><th>Órgão</th><th>Região</th><th>Turno</th></tr></thead>
+      <thead><tr>${sortHead("status", "Situação")}${sortHead("name", "Nome")}${sortHead("registration", "Matrícula")}${sortHead("agency", "Órgão")}${sortHead("region", "Região")}${sortHead("shift", "Turno")}</tr></thead>
       <tbody>
-        ${rows.map((item) => `
+        ${ordered.map((item) => `
           <tr data-open="${esc(item.id)}" class="${state.editor?.id === item.id ? "is-selected" : ""}">
             <td>${pill(item.status)}</td>
             <td><b>${esc(item.name)}</b><br><span class="muted">${esc(item.role)}</span></td>

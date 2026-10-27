@@ -756,8 +756,8 @@ async function onClick(event) {
       toast(result.message);
     } catch (error) {
       toast(error.message, "bad");
-      button.disabled = false;
     }
+    button.disabled = false;
   }
   if (action === "reset") {
     if (!window.confirm("Restaurar a cidade de demonstração? O que foi cadastrado nesta sessão sai.")) return;
@@ -888,6 +888,7 @@ async function ensureSession() {
 }
 
 function paintLogin(config, resolve) {
+  window.__turnstileDown = false;
   const siteKey = config.turnstileSiteKey || "";
   const cloudflare = config.cloudflare?.enabled;
   document.getElementById("app").innerHTML = `
@@ -903,7 +904,7 @@ function paintLogin(config, resolve) {
         <p class="lede">Entre com o usuário da central. O administrador cria as outras contas em Acessos.</p>
         <label class="field">Usuário<input name="email" autocomplete="username" required placeholder="nome@orgao" /></label>
         <label class="field">Senha<input name="password" type="password" autocomplete="current-password" required /></label>
-        ${siteKey ? `<div id="turnstile-box"></div><p class="hint" id="turnstile-note" hidden>A Cloudflare não alcançou este endereço. Neste computador a entrada segue com usuário e senha.</p>` : ""}
+        ${siteKey ? `<div id="turnstile-box"></div><p class="hint" id="turnstile-note" hidden></p>` : ""}
         <button type="submit" class="primary">Entrar</button>
         ${cloudflare ? `<button type="button" class="ghost" id="login-cloudflare">Entrar com a Cloudflare Access</button>` : ""}
         <div class="gate-demo">
@@ -945,16 +946,27 @@ function paintLogin(config, resolve) {
 function mountTurnstile(siteKey) {
   const node = document.getElementById("turnstile-box");
   if (!node) return;
-  const render = () => window.turnstile.render(node, {
-    sitekey: siteKey,
-    theme: document.documentElement.dataset.theme === "dark" ? "dark" : "light",
-    "error-callback": () => {
-      window.__turnstileDown = true;
-      node.replaceChildren();
-      const note = document.getElementById("turnstile-note");
-      if (note) note.hidden = false;
-    },
-  });
+  const localHost = location.hostname === "127.0.0.1" || location.hostname === "localhost" || location.hostname === "::1";
+  const render = () => {
+    const widgetId = window.turnstile.render(node, {
+      sitekey: siteKey,
+      theme: document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+      retry: "auto",
+      "error-callback": (code) => {
+        const hostnameBlocked = String(code) === "110200";
+        if (!hostnameBlocked) {
+          window.turnstile.reset(widgetId);
+          return;
+        }
+        window.__turnstileDown = true;
+        node.replaceChildren();
+        const note = document.getElementById("turnstile-note");
+        if (!note || localHost) return;
+        note.hidden = false;
+        note.textContent = `Adicione ${location.hostname} nos hostnames deste widget, no painel da Cloudflare.`;
+      },
+    });
+  };
   if (window.turnstile) {
     render();
     return;

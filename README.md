@@ -28,9 +28,17 @@ A tela principal é a visão geral: mapa, o que está acontecendo agora e a fila
 
 O mapa começa na operação de demonstração (Marília, Assis e Cândido Mota). A busca territorial localiza uma UF ou um município; fora dessa operação o mapa só mostra o lugar, sem inventar ocorrência ou agente. A busca de outros municípios usa o Nominatim (OpenStreetMap) quando há internet, e o resultado fica em cache.
 
-Acessos ficam no menu. A sessão inicial é o operador da CCO. A senha das contas de demonstração é `demonstracao`. O servidor recusa despacho, cadastro e restauração quando o perfil não permite. Um gestor municipal de Marília não altera equipamento de Assis.
+A primeira tela pede usuário e senha. Os atalhos entram nas contas de demonstração; a senha delas é `demonstracao`. O administrador cria as outras contas em Acessos, com perfil e grupo. A sessão fica na memória do processo: reiniciar o servidor pede o login de novo. O servidor recusa despacho, cadastro e restauração quando o perfil não permite. Um gestor municipal de Marília não altera equipamento de Assis. O operador da CCO vê a central, a fila, as ordens, as rotas, as ocorrências, os alertas, os agentes e a frota. Previsão, equipamentos e os painéis de gestão ficam com supervisor, gestor e administrador.
 
 Apagar `data/store.json` recria a cidade-piloto. `data/access.json` guarda usuários e auditoria, sem as senhas em texto.
+
+## Supabase e Vercel
+
+Este projeto não é Next.js. Os comandos `npm install @supabase/supabase-js` e `npx shadcn@latest add @supabase/supabase-client-nextjs` não entram aqui. A central fala com o Supabase pela biblioteca padrão do Python.
+
+No `.env`, ou nas variáveis da Vercel, use `SUPABASE_URL` e `SUPABASE_ANON_KEY`. A chave publicável (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`) também é aceita nesse segundo nome. `GET /api/supabase` diz se o projeto respondeu. A service role ainda não foi cadastrada: sem ela o cadastro continua em arquivo e não é gravado nas tabelas do Supabase.
+
+Na Vercel o build copia `static/` para `public/` e a API sobe em `api/index.py`. Cadastre também `FOGO_ENV=production` e `FOGO_DATA=/tmp/fogo`. A pasta `/tmp` some quando a função esfria, e a sessão fica na memória do processo. Para o cadastro sobreviver na nuvem, falta a service role e as tabelas.
 
 ## Onde está a lógica
 
@@ -105,7 +113,7 @@ Os números desta camada são estimativas com premissas em `value_settings` no c
 | O gestor não vê o custo do mês | Painel Financeiro | Soma de mão de obra, peças e deslocamento; perda = horas parado × custo/hora do tipo e da via | OS encerradas e `horas_parada_mes` | Meses sem OS usam série de demonstração, marcada na tela |
 | Aferição vencida passa batido | Lista 30/15/7 dias e OS automática | Data `validade_afericao` comparada com hoje | Radar e balança, órgão no cadastro | O prazo legal precisa ser confirmado com a legislação e o órgão. A autuação é simulada |
 | OS concluída sem o técnico no local | Check-in, fotos e tempo mínimo | Haversine contra o raio configurável | Check-in, nomes das fotos e início da OS | Foto é o nome do arquivo, não o binário. Sem prova, a OS fecha como conclusão suspeita |
-| Não se sabe quantas equipes bastam | Simulador de 1 a 15 equipes | Eventos discretos: chegada exponencial e atendimento na média das OS | Histórico de abertura; se a amostra for curta, usa 1,2 por hora | Um turno de 8 h. SLA é a espera até o início, não o SLA contratual da OS |
+| Não se sabe quantas equipes bastam | Simulador de 1 a 15 equipes | Eventos discretos: chegada exponencial e atendimento na média das OS | Histórico de abertura; se a amostra for curta, usa 3,0 por hora | Um turno de 8 h. SLA é a espera até o início, não o SLA contratual da OS |
 | A dica se perde no fechamento | Campo de uma frase e busca por modelo | Sobreposição de tipo e palavras | `dica_do_tecnico` | Não é um modelo treinado |
 | Preventiva no horário errado | Aviso de vizinho fora ou pico | Mesma região fora, outra preventiva aberta, ou 7h–9h e 17h–19h | Situação do equipamento e a hora | A sugestão anda de hora em hora, sem o trânsito real |
 | O histórico pode ser alterado | Cadeia SHA-256 e PDF | Cada registro inclui o hash do anterior | `ledger` no cadastro | A cadeia guarda os eventos novos. O log antigo de acesso continua separado |

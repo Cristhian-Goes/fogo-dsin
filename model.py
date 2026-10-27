@@ -2383,12 +2383,14 @@ def apply_scenario(data: dict, name: str, moment: datetime) -> dict[str, Any]:
         region = "Sampaio Vidal"
         mean, _, _, _, _ = bucket_stats(data, region, moment.weekday(), moment.hour)
         projected = min(100, round(100 * (mean * 1.25) / 2.35))
+        place = REGIONS[region]
+        _, live = __import__("ops_dayroutes")._rain(place["lat"], place["lng"])
         push_feed(data, "atencao", f"Exercício de chuva forte em {region}. Cadastro não foi alterado.", region, moment)
         return {
             "message": (
                 f"Exercício de chuva em {region}. A média desta hora, com fator 1,25, "
                 f"apontaria pressão perto de {projected}. Nenhum equipamento mudou de situação. "
-                "O fator segue a leitura de que chuva aumenta ocorrência; o Open-Meteo entra só quando a consulta de clima responde."
+                f"Clima agora: {live}"
             ),
             "focus": {"kind": "region", "id": region},
         }

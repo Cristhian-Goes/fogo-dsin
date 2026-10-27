@@ -39,6 +39,15 @@ function paint(main) {
       </div>
       ${days.map((item) => card(item.region, `Pressão prevista ${item.hour}h–${Math.min(23, item.hour + 1)}h`, item.detail, item.action, item.why)).join("")
         || "<p>Nenhuma região pede reforço neste dia.</p>"}
+      <h2>Próximas 6 horas</h2>
+      <ul class="rows">${(report.horizon_6h || []).map((row) => `<li><b>${esc(row.label)}</b> ${esc(row.region)} · pressão ${esc(String(row.ipo))} · ${esc(row.level_label)}${row.gap ? ` · falta ${esc(String(row.gap))}` : ""}</li>`).join("")}</ul>
+      <h2>Anomalia agora</h2>
+      ${(report.anomalies || []).length
+        ? (report.anomalies || []).map((item) => `<article class="decision"><h2>${esc(item.title)}</h2><p>${esc(item.detail)}</p></article>`).join("")
+        : "<p>Nenhuma região está fora do padrão desta hora.</p>"}
+      <h2>Disponibilidade</h2>
+      <p>${esc(report.trends?.availability?.note || "")}</p>
+      <p class="hint">${esc(report.trends?.incidents?.note || "")}</p>
       <h2>Equipamentos</h2>
       ${risks.slice(0, 4).map((item) => card(
         item.serial,
@@ -54,6 +63,10 @@ function paint(main) {
       <ul class="rows">
         ${(report.ml?.rows || []).map((row) => `<li>${esc(row.region)} às ${esc(row.hour)}: volume previsto ${String(row.predicted).replace(".", ",")}</li>`).join("")}
       </ul>
+      <div class="actions">
+        <button type="button" class="ghost" data-action="scenario" data-scenario="chuva">E se chover forte</button>
+        <button type="button" class="ghost" data-action="briefing">Resumo do turno</button>
+      </div>
       <details>
         <summary>O que entra nesta conta</summary>
         <p>${esc(report.method.summary)}</p>

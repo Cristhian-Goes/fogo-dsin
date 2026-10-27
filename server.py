@@ -39,6 +39,38 @@ def _load_env() -> None:
 
 _load_env()
 
+
+def supabase_public() -> dict[str, str]:
+    url = (os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL") or "").strip().rstrip("/")
+    key = (
+        os.environ.get("SUPABASE_ANON_KEY")
+        or os.environ.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+        or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+        or ""
+    ).strip()
+    return {"url": url, "key": key}
+
+
+def supabase_status() -> dict[str, object]:
+    public = supabase_public()
+    if not public["url"] or not public["key"]:
+        return {"configured": False, "ok": False, "detail": "Faltam o endereço do Supabase e a chave publicável."}
+    request = urllib.request.Request(
+        public["url"] + "/auth/v1/health",
+        headers={
+            "apikey": public["key"],
+            "Authorization": f"Bearer {public['key']}",
+            "User-Agent": "FOGO-CCO/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=6) as response:
+            response.read(64)
+        return {"configured": True, "ok": True, "detail": "O projeto Supabase respondeu."}
+    except Exception:
+        return {"configured": True, "ok": False, "detail": "O endereço está configurado, mas o Supabase não respondeu."}
+
+
 import access
 import cloudflare_access
 import assistant
@@ -705,13 +737,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, **created})
             return
         if parts == ["config"] and method == "GET":
+            public = supabase_public()
             self.send_json({
-                "supabaseUrl": os.environ.get("SUPABASE_URL", ""),
-                "supabaseAnonKey": os.environ.get("SUPABASE_ANON_KEY", ""),
+                "supabaseUrl": public["url"],
+                "supabaseAnonKey": public["key"],
+                "supabase": {"configured": bool(public["url"] and public["key"])},
                 "environment": os.environ.get("FOGO_ENV", "development"),
                 "cloudflare": cloudflare_access.public_status(),
                 "turnstileSiteKey": cloudflare_access.turnstile_sitekey(),
             })
+            return
+        if parts == ["supabase"] and method == "GET":
+            self.send_json(supabase_status())
             return
         self.send_json({"error": "Caminho não encontrado."}, 404)
 
